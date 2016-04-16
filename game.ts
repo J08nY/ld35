@@ -1,12 +1,14 @@
 /// <reference path="three_js/ts/three.d.ts"/>
 /// <reference path="physi_js/physijs.d.ts"/>
 /// <reference path="three_js/ts/detector.d.ts"/>
+'use strict';
 
 import Vector3 = THREE.Vector3;
-import ShaderMaterial = THREE.ShaderMaterial;
 import Material = THREE.Material;
 import Geometry = THREE.Geometry;
 
+Physijs.scripts.worker = "/physi_js/physijs_worker.js";
+Physijs.scripts.ammo = "/physi_js/ammo.js";
 
 class PointerLock {
     hasLock:boolean = false;
@@ -39,7 +41,7 @@ class PointerLock {
             //gained
             this.hasLock = true;
             this.blocker.style.display = "none";
-            if(this.game.state == GameState.INITIALIZED || this.game.state == GameState.PAUSED) {
+            if (this.game.state == GameState.INITIALIZED || this.game.state == GameState.PAUSED) {
                 this.game.start();
             }
             console.log("gained");
@@ -51,7 +53,7 @@ class PointerLock {
             this.blocker.style.display = 'box';
 
             this.instructions.style.display = "";
-            if(this.game.state == GameState.STARTED) {
+            if (this.game.state == GameState.STARTED) {
                 this.game.pause();
             }
             console.log("lost");
@@ -148,12 +150,10 @@ class Keyboard {
 }
 
 
-class Morph extends Physijs.Mesh {
-    faces:number;
+class Morph extends Physijs.SphereMesh {
 
-    constructor(numFaces:number, material:THREE.Material, mass:number) {
-        let geometry = Morph.generateGeometry(numFaces);
-        super(geometry, material, mass);
+    constructor(public faces:number, material?:THREE.Material, mass?:number) {
+        super(Morph.generateGeometry(faces), material, mass);
     }
 
     static generateGeometry(numFaces:number):THREE.Geometry {
@@ -182,61 +182,103 @@ class Morph extends Physijs.Mesh {
         this.updateGeometry(this.faces + numFaces);
     }
 
-    wobble():void {
-
-    }
-
 }
 
 class Enemy extends Morph {
 
     constructor() {
-        super(6, Enemy.getMaterial(), 2);
+        super(6, Physijs.createMaterial(
+            new THREE.MeshBasicMaterial({
+                color: 0xb02000
+            }),
+            .8,
+            .3
+        ), 2);
     }
 
-    static getMaterial():Material {
-        return new THREE.MeshBasicMaterial({
-            color: 0xb02000
-        });
-        /*
-         return new THREE.ShaderMaterial({
-         uniforms:{},
-         fragmentShader: document.getElementById(Enemy.shader).textContent,
-         vertexShader: document.getElementById(World.vertex_shader).textContent,
-         });*/
-
-    }
+    /*
+     static getMaterial():Physijs.Material {
+     return Physijs.createMaterial(
+     new THREE.MeshBasicMaterial({
+     color: 0xb02000
+     }),
+     .8,
+     .3
+     );
+     }
+     */
 }
 
 class Player extends Morph {
 
     constructor() {
-        super(4, Player.getMaterial(), 1);
+
+        super(4, Physijs.createMaterial(
+            new THREE.MeshBasicMaterial({
+                color: 0x00a0b0
+            }),
+            .8,
+            .3
+        ), 1);
     }
 
-    static getMaterial():Material {
-        return new THREE.MeshBasicMaterial({
-            color: 0x00a0b0
-        });
-        /*
-         return new THREE.ShaderMaterial({
-         uniforms:{},
-         fragmentShader: document.getElementById(Player.shader).textContent,
-         vertexShader: document.getElementById(World.vertex_shader).textContent,
-         });*/
-    }
+    /*
+     static getMaterial():Physijs.Material {
+     return Physijs.createMaterial(
+     new THREE.MeshBasicMaterial({
+     color: 0x00a0b0
+     }),
+     .8,
+     .3
+     );
+     }
+     */
 }
 
 class World {
 
-    constructor(player:Player, scene:THREE.Scene, camera:THREE.Camera) {
-        player.position.set(0, 0, 0);
+
+    constructor(player:Player, scene:Physijs.Scene, camera:THREE.Camera) {
+
+        player.position.set(0, 2, 0);
         scene.add(player);
+
+        //scene.add(camera);
 
         let enemy = new Enemy();
         enemy.position.set(0, 5, 0);
         scene.add(enemy);
+
+
+        let light:any = new THREE.DirectionalLight(0xFFFFFF);
+        light.position.set(20, 40, -15);
+        light.target.position.copy(player.position);
+        light.castShadow = true;
+        light.shadow.camera.left = -60;
+        light.shadow.camera.top = -60;
+        light.shadow.camera.right = 60;
+        light.shadow.camera.bottom = 60;
+        light.shadow.camera.near = 20;
+        light.shadow.camera.far = 200;
+        light.shadow.bias = -.0001;
+        //light.shadow.map.width = light.shadow.map.height = 2048;
+        scene.add(light);
+
+
+        let groundGeometry = new THREE.PlaneGeometry(100, 100);
+        groundGeometry.rotateX(90);
+        let groundMaterial = Physijs.createMaterial(
+            new THREE.MeshBasicMaterial({color: 0xeaeaea}),
+            .8,
+            .3
+        );
+
+        let ground = new Physijs.PlaneMesh(groundGeometry, groundMaterial);
+        scene.add(ground);
+        ground.receiveShadow = true;
+
     }
+
 }
 
 enum GameState {
@@ -248,10 +290,11 @@ enum GameState {
 
 class Game {
     renderer:THREE.WebGLRenderer;
-    scene:THREE.Scene;
-    camera:THREE.PerspectiveCamera;
 
+    camera:THREE.PerspectiveCamera;
+    scene:Physijs.Scene;
     player:Player;
+
     world:World;
     state:GameState;
 
@@ -273,11 +316,12 @@ class Game {
         this.renderer.setClearColor(0xffffff);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", () => this.onWindowResize(), false);
 
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+        this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
 
         this.keyboard = new Keyboard();
         this.keyboard.register();
@@ -285,6 +329,8 @@ class Game {
 
     init():void {
         //init world
+        this.scene = new Physijs.Scene;
+
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
 
@@ -319,7 +365,20 @@ class Game {
         //console.log("tick " + delta);
         this.ticks++;
         this.keyboard.update();
-
+        if (this.keyboard.pressed("W")) {
+            this.player.applyCentralForce(new Vector3(0, 0, -0.5));
+        }
+        if (this.keyboard.pressed("A")) {
+            this.player.applyCentralForce(new Vector3(0, 0, 0.5));
+        }
+        if (this.keyboard.pressed("S")) {
+            this.player.applyCentralForce(new Vector3(-0.5, 0, 0));
+        }
+        if (this.keyboard.pressed("D")) {
+            this.player.applyCentralForce(new Vector3(0.5, 0, 0));
+        }
+        this.camera.lookAt(this.player.position);
+        this.scene.simulate();
     }
 
     run(timestamp?):void {

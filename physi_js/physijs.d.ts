@@ -1,12 +1,11 @@
 // Type definitions for Physijs
 // Project: http://chandlerprall.github.io/Physijs/
 // Definitions by: Satoru Kimura <https://github.com/gyohk>
-// Definitions: https://github.com/DefinitelyTyped/DefinitelyTyped
 
 
 /// <reference path="../three_js/ts/three.d.ts" />
 
-declare namespace Physijs {
+declare module Physijs {
     export function noConflict():Object;
     export function createMaterial(material: THREE.Material, friction?: number, restitution?: number): Material;
 

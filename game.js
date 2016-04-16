@@ -1,15 +1,17 @@
 /// <reference path="three_js/ts/three.d.ts"/>
 /// <reference path="physi_js/physijs.d.ts"/>
 /// <reference path="three_js/ts/detector.d.ts"/>
+'use strict';
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var Vector3 = THREE.Vector3;
-var ShaderMaterial = THREE.ShaderMaterial;
 var Material = THREE.Material;
 var Geometry = THREE.Geometry;
+Physijs.scripts.worker = "/physi_js/physijs_worker.js";
+Physijs.scripts.ammo = "/physi_js/ammo.js";
 var PointerLock = (function () {
     function PointerLock(game, blocker, instructions) {
         this.game = game;
@@ -133,9 +135,9 @@ var Keyboard = (function () {
 }());
 var Morph = (function (_super) {
     __extends(Morph, _super);
-    function Morph(numFaces, material, mass) {
-        var geometry = Morph.generateGeometry(numFaces);
-        _super.call(this, geometry, material, mass);
+    function Morph(faces, material, mass) {
+        _super.call(this, Morph.generateGeometry(faces), material, mass);
+        this.faces = faces;
     }
     Morph.generateGeometry = function (numFaces) {
         if (numFaces == 4) {
@@ -162,53 +164,53 @@ var Morph = (function (_super) {
     Morph.prototype.grow = function (numFaces) {
         this.updateGeometry(this.faces + numFaces);
     };
-    Morph.prototype.wobble = function () {
-    };
     return Morph;
-}(Physijs.Mesh));
+}(Physijs.SphereMesh));
 var Enemy = (function (_super) {
     __extends(Enemy, _super);
     function Enemy() {
-        _super.call(this, 6, Enemy.getMaterial(), 2);
-    }
-    Enemy.getMaterial = function () {
-        return new THREE.MeshBasicMaterial({
+        _super.call(this, 6, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0xb02000
-        });
-        /*
-         return new THREE.ShaderMaterial({
-         uniforms:{},
-         fragmentShader: document.getElementById(Enemy.shader).textContent,
-         vertexShader: document.getElementById(World.vertex_shader).textContent,
-         });*/
-    };
+        }), .8, .3), 2);
+    }
     return Enemy;
 }(Morph));
 var Player = (function (_super) {
     __extends(Player, _super);
     function Player() {
-        _super.call(this, 4, Player.getMaterial(), 1);
-    }
-    Player.getMaterial = function () {
-        return new THREE.MeshBasicMaterial({
+        _super.call(this, 4, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
-        });
-        /*
-         return new THREE.ShaderMaterial({
-         uniforms:{},
-         fragmentShader: document.getElementById(Player.shader).textContent,
-         vertexShader: document.getElementById(World.vertex_shader).textContent,
-         });*/
-    };
+        }), .8, .3), 1);
+    }
     return Player;
 }(Morph));
 var World = (function () {
     function World(player, scene, camera) {
-        player.position.set(0, 0, 0);
+        player.position.set(0, 2, 0);
         scene.add(player);
+        //scene.add(camera);
         var enemy = new Enemy();
         enemy.position.set(0, 5, 0);
         scene.add(enemy);
+        var light = new THREE.DirectionalLight(0xFFFFFF);
+        light.position.set(20, 40, -15);
+        light.target.position.copy(player.position);
+        light.castShadow = true;
+        light.shadow.camera.left = -60;
+        light.shadow.camera.top = -60;
+        light.shadow.camera.right = 60;
+        light.shadow.camera.bottom = 60;
+        light.shadow.camera.near = 20;
+        light.shadow.camera.far = 200;
+        light.shadow.bias = -.0001;
+        //light.shadow.map.width = light.shadow.map.height = 2048;
+        scene.add(light);
+        var groundGeometry = new THREE.PlaneGeometry(100, 100);
+        groundGeometry.rotateX(90);
+        var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xeaeaea }), .8, .3);
+        var ground = new Physijs.PlaneMesh(groundGeometry, groundMaterial);
+        scene.add(ground);
+        ground.receiveShadow = true;
     }
     return World;
 }());
@@ -233,15 +235,17 @@ var Game = (function () {
         this.renderer.setClearColor(0xffffff);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", function () { return _this.onWindowResize(); }, false);
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+        this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
         this.keyboard = new Keyboard();
         this.keyboard.register();
     }
     Game.prototype.init = function () {
         //init world
+        this.scene = new Physijs.Scene;
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
         //init camera
@@ -269,6 +273,20 @@ var Game = (function () {
         //console.log("tick " + delta);
         this.ticks++;
         this.keyboard.update();
+        if (this.keyboard.pressed("W")) {
+            this.player.applyCentralForce(new Vector3(0, 0, -0.5));
+        }
+        if (this.keyboard.pressed("A")) {
+            this.player.applyCentralForce(new Vector3(0, 0, 0.5));
+        }
+        if (this.keyboard.pressed("S")) {
+            this.player.applyCentralForce(new Vector3(-0.5, 0, 0));
+        }
+        if (this.keyboard.pressed("D")) {
+            this.player.applyCentralForce(new Vector3(0.5, 0, 0));
+        }
+        this.camera.lookAt(this.player.position);
+        this.scene.simulate();
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
