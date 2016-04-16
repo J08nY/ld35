@@ -8,7 +8,7 @@ import Material = THREE.Material;
 import Geometry = THREE.Geometry;
 
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
-Physijs.scripts.ammo = "physi_js/ammo.js";
+Physijs.scripts.ammo = "ammo.js";
 
 class PointerLock {
     hasLock:boolean = false;

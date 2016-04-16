@@ -11,7 +11,7 @@ var Vector3 = THREE.Vector3;
 var Material = THREE.Material;
 var Geometry = THREE.Geometry;
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
-Physijs.scripts.ammo = "physi_js/ammo.js";
+Physijs.scripts.ammo = "ammo.js";
 var PointerLock = (function () {
     function PointerLock(game, blocker, instructions) {
         this.game = game;
