@@ -3,10 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <title>Transmuto</title>
-    <script type="text/javascript" src="three.js/dist/three.min.js"></script>
-    <script type="text/javascript" src="Physi.js/physi.js"></script>
+    <script type="text/javascript" src="three_js/dist/three.min.js"></script>
+    <script type="text/javascript" src="three_js/src/Detector.js"></script>
+    <script type="text/javascript" src="physi_js/physi.js"></script>
 </head>
 <body>
-<script type="text/javascript" src="main.js"></script>
+<script id="fragment_shader" type="x-shader/x-fragment">
+
+			uniform float time;
+			uniform vec2 resolution;
+
+			varying vec2 vUv;
+
+			void main( void ) {
+
+				vec2 position = -1.0 + 2.0 * vUv;
+
+				float red = abs( sin( position.x * position.y + time / 5.0 ) );
+				float green = abs( sin( position.x * position.y + time / 4.0 ) );
+				float blue = abs( sin( position.x * position.y + time / 3.0 ) );
+				gl_FragColor = vec4( red, green, blue, 1.0 );
+
+			}
+
+
+
+</script>
+<script id="vertex_shader" type="x-shader/x-vertex">
+
+			varying vec2 vUv;
+
+			void main()
+			{
+				vUv = uv;
+				vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+				gl_Position = projectionMatrix * mvPosition;
+			}
+
+
+</script>
+<script type="text/javascript" src="game.js"></script>
 </body>
 </html>
