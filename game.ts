@@ -7,6 +7,7 @@ import Vector3 = THREE.Vector3;
 import Material = THREE.Material;
 import Geometry = THREE.Geometry;
 
+//wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
 
@@ -142,10 +143,43 @@ class Keyboard {
         document.addEventListener("keyup", (event) => this.onKeyUp(event), false);
     }
 
+    unregister() {
+        document.removeEventListener("keydown", (event) => this.onKeyDown(event), false);
+        document.removeEventListener("keyup", (event) => this.onKeyUp(event), false);
+    }
+
     static keyName(keyCode) {
         return ( Keyboard.k[keyCode] != null ) ?
             Keyboard.k[keyCode] :
             String.fromCharCode(keyCode);
+    }
+}
+
+class Mouse {
+    x:number;
+    y:number;
+    xMovement:number;
+    yMovement:number;
+    private buttons: {};
+
+    constructor() {
+
+    }
+
+    onMouseMove = (event: MouseEvent) => {
+        this.x = event.screenX;
+        this.xMovement = event.movementX;
+        this.y = event.screenY;
+        this.yMovement = event.movementY;
+        console.log(this.x + " " + this.y + " :: " + this.xMovement + " " + this.yMovement);
+    };
+
+    register() {
+        document.addEventListener("mousemove", this.onMouseMove, false);
+    }
+
+    unregister() {
+        document.removeEventListener("mousemove", this.onMouseMove, false);
     }
 }
 
@@ -213,13 +247,17 @@ class Player extends Morph {
 
     constructor() {
 
-        super(4, Physijs.createMaterial(
+        super(20, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
                 color: 0x00a0b0
             }),
             .8,
             .3
         ), 1);
+    }
+
+    jump() {
+        this.applyCentralImpulse(new Vector3(0, 20, 0));
     }
 
     /*
@@ -241,12 +279,14 @@ class World {
     constructor(player:Player, scene:Physijs.Scene, camera:THREE.Camera) {
 
         player.position.set(0, 2, 0);
+        player.castShadow = true;
         scene.add(player);
 
         //scene.add(camera);
 
         let enemy = new Enemy();
         enemy.position.set(0, 5, 0);
+        enemy.castShadow = true;
         scene.add(enemy);
 
 
@@ -261,19 +301,18 @@ class World {
         light.shadow.camera.near = 20;
         light.shadow.camera.far = 200;
         light.shadow.bias = -.0001;
-        //light.shadow.map.width = light.shadow.map.height = 2048;
+        light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
         scene.add(light);
 
 
-        let groundGeometry = new THREE.PlaneGeometry(100, 100);
-        groundGeometry.rotateX(90);
+        let groundGeometry = new THREE.BoxGeometry(100, 1 ,100);
         let groundMaterial = Physijs.createMaterial(
             new THREE.MeshBasicMaterial({color: 0xeaeaea}),
             .8,
             .3
         );
 
-        let ground = new Physijs.PlaneMesh(groundGeometry, groundMaterial);
+        let ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
         scene.add(ground);
         ground.receiveShadow = true;
 
@@ -299,6 +338,7 @@ class Game {
     state:GameState;
 
     keyboard:Keyboard;
+    mouse:Mouse;
 
     private ticks:number = 0;
     private delta:number = 0;
@@ -324,18 +364,20 @@ class Game {
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
 
         this.keyboard = new Keyboard();
-        this.keyboard.register();
+
+        this.mouse = new Mouse();
     }
 
     init():void {
         //init world
         this.scene = new Physijs.Scene;
+        this.scene.setGravity(new THREE.Vector3( 0, -10, 0 ));
 
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
 
         //init camera
-        this.camera.position.set(10, 10, 10);
+        this.camera.position.set(5, 5, 5);
         this.camera.lookAt(this.player.position);
 
         this.state = GameState.INITIALIZED;
@@ -366,19 +408,25 @@ class Game {
         this.ticks++;
         this.keyboard.update();
         if (this.keyboard.pressed("W")) {
-            this.player.applyCentralForce(new Vector3(0, 0, -0.5));
-        }
-        if (this.keyboard.pressed("A")) {
-            this.player.applyCentralForce(new Vector3(0, 0, 0.5));
+            this.player.applyCentralForce(new Vector3(0, 0, -10));
         }
         if (this.keyboard.pressed("S")) {
-            this.player.applyCentralForce(new Vector3(-0.5, 0, 0));
+            this.player.applyCentralForce(new Vector3(0, 0, 10));
+        }
+        if (this.keyboard.pressed("A")) {
+            this.player.applyCentralForce(new Vector3(-10, 0, 0));
         }
         if (this.keyboard.pressed("D")) {
-            this.player.applyCentralForce(new Vector3(0.5, 0, 0));
+            this.player.applyCentralForce(new Vector3(10, 0, 0));
         }
-        this.camera.lookAt(this.player.position);
-        this.scene.simulate();
+        if(this.keyboard.down("space")){
+            console.log("jump");
+            this.player.jump();
+        }
+
+        //this.camera.lookAt(this.player.position);
+        this.camera.position.addVectors(this.player.position, new Vector3(5,5,5));
+        this.scene.simulate(undefined, 20);
     }
 
     run(timestamp?):void {
@@ -414,11 +462,19 @@ class Game {
     start() {
         this.state = GameState.STARTED;
         this.keepRunning = true;
+        this.lastFrame = performance.now();
+
+        this.keyboard.register();
+        this.mouse.register();
+
         this.run();
     }
 
     pause() {
         this.state = GameState.PAUSED;
+        this.keyboard.unregister();
+        this.mouse.unregister();
+
         this.keepRunning = false;
     }
 

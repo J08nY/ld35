@@ -10,6 +10,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Vector3 = THREE.Vector3;
 var Material = THREE.Material;
 var Geometry = THREE.Geometry;
+//wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
 var PointerLock = (function () {
@@ -117,6 +118,11 @@ var Keyboard = (function () {
         document.addEventListener("keydown", function (event) { return _this.onKeyDown(event); }, false);
         document.addEventListener("keyup", function (event) { return _this.onKeyUp(event); }, false);
     };
+    Keyboard.prototype.unregister = function () {
+        var _this = this;
+        document.removeEventListener("keydown", function (event) { return _this.onKeyDown(event); }, false);
+        document.removeEventListener("keyup", function (event) { return _this.onKeyUp(event); }, false);
+    };
     Keyboard.keyName = function (keyCode) {
         return (Keyboard.k[keyCode] != null) ?
             Keyboard.k[keyCode] :
@@ -132,6 +138,25 @@ var Keyboard = (function () {
         219: "[", 220: "\\", 221: "]", 222: "'"
     };
     return Keyboard;
+}());
+var Mouse = (function () {
+    function Mouse() {
+        var _this = this;
+        this.onMouseMove = function (event) {
+            _this.x = event.screenX;
+            _this.xMovement = event.movementX;
+            _this.y = event.screenY;
+            _this.yMovement = event.movementY;
+            console.log(_this.x + " " + _this.y + " :: " + _this.xMovement + " " + _this.yMovement);
+        };
+    }
+    Mouse.prototype.register = function () {
+        document.addEventListener("mousemove", this.onMouseMove, false);
+    };
+    Mouse.prototype.unregister = function () {
+        document.removeEventListener("mousemove", this.onMouseMove, false);
+    };
+    return Mouse;
 }());
 var Morph = (function (_super) {
     __extends(Morph, _super);
@@ -178,19 +203,24 @@ var Enemy = (function (_super) {
 var Player = (function (_super) {
     __extends(Player, _super);
     function Player() {
-        _super.call(this, 4, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        _super.call(this, 20, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
         }), .8, .3), 1);
     }
+    Player.prototype.jump = function () {
+        this.applyCentralImpulse(new Vector3(0, 20, 0));
+    };
     return Player;
 }(Morph));
 var World = (function () {
     function World(player, scene, camera) {
         player.position.set(0, 2, 0);
+        player.castShadow = true;
         scene.add(player);
         //scene.add(camera);
         var enemy = new Enemy();
         enemy.position.set(0, 5, 0);
+        enemy.castShadow = true;
         scene.add(enemy);
         var light = new THREE.DirectionalLight(0xFFFFFF);
         light.position.set(20, 40, -15);
@@ -203,12 +233,11 @@ var World = (function () {
         light.shadow.camera.near = 20;
         light.shadow.camera.far = 200;
         light.shadow.bias = -.0001;
-        //light.shadow.map.width = light.shadow.map.height = 2048;
+        light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
         scene.add(light);
-        var groundGeometry = new THREE.PlaneGeometry(100, 100);
-        groundGeometry.rotateX(90);
+        var groundGeometry = new THREE.BoxGeometry(100, 1, 100);
         var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xeaeaea }), .8, .3);
-        var ground = new Physijs.PlaneMesh(groundGeometry, groundMaterial);
+        var ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
         scene.add(ground);
         ground.receiveShadow = true;
     }
@@ -241,15 +270,16 @@ var Game = (function () {
         window.addEventListener("resize", function () { return _this.onWindowResize(); }, false);
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
         this.keyboard = new Keyboard();
-        this.keyboard.register();
+        this.mouse = new Mouse();
     }
     Game.prototype.init = function () {
         //init world
         this.scene = new Physijs.Scene;
+        this.scene.setGravity(new THREE.Vector3(0, -10, 0));
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
         //init camera
-        this.camera.position.set(10, 10, 10);
+        this.camera.position.set(5, 5, 5);
         this.camera.lookAt(this.player.position);
         this.state = GameState.INITIALIZED;
     };
@@ -274,19 +304,24 @@ var Game = (function () {
         this.ticks++;
         this.keyboard.update();
         if (this.keyboard.pressed("W")) {
-            this.player.applyCentralForce(new Vector3(0, 0, -0.5));
-        }
-        if (this.keyboard.pressed("A")) {
-            this.player.applyCentralForce(new Vector3(0, 0, 0.5));
+            this.player.applyCentralForce(new Vector3(0, 0, -10));
         }
         if (this.keyboard.pressed("S")) {
-            this.player.applyCentralForce(new Vector3(-0.5, 0, 0));
+            this.player.applyCentralForce(new Vector3(0, 0, 10));
+        }
+        if (this.keyboard.pressed("A")) {
+            this.player.applyCentralForce(new Vector3(-10, 0, 0));
         }
         if (this.keyboard.pressed("D")) {
-            this.player.applyCentralForce(new Vector3(0.5, 0, 0));
+            this.player.applyCentralForce(new Vector3(10, 0, 0));
         }
-        this.camera.lookAt(this.player.position);
-        this.scene.simulate();
+        if (this.keyboard.down("space")) {
+            console.log("jump");
+            this.player.jump();
+        }
+        //this.camera.lookAt(this.player.position);
+        this.camera.position.addVectors(this.player.position, new Vector3(5, 5, 5));
+        this.scene.simulate(undefined, 20);
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
@@ -319,10 +354,15 @@ var Game = (function () {
     Game.prototype.start = function () {
         this.state = GameState.STARTED;
         this.keepRunning = true;
+        this.lastFrame = performance.now();
+        this.keyboard.register();
+        this.mouse.register();
         this.run();
     };
     Game.prototype.pause = function () {
         this.state = GameState.PAUSED;
+        this.keyboard.unregister();
+        this.mouse.unregister();
         this.keepRunning = false;
     };
     Game.prototype.stop = function () {
