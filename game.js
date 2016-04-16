@@ -29,7 +29,7 @@ var PointerLock = (function () {
         document.addEventListener('pointerlockerror', function (event) { return _this.onError(event); }, false);
         document.addEventListener('mozpointerlockerror', function (event) { return _this.onError(event); }, false);
         document.addEventListener('webkitpointerlockerror', function (event) { return _this.onError(event); }, false);
-        this.instructions.addEventListener("click", function (event) { return _this.onClick(event); }, false);
+        this.blocker.addEventListener("click", function (event) { return _this.onClick(event); }, false);
     };
     PointerLock.prototype.onChange = function (event) {
         var element = document.body;

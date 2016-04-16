@@ -28,7 +28,7 @@ class PointerLock {
         document.addEventListener('mozpointerlockerror', (event) => this.onError(event), false);
         document.addEventListener('webkitpointerlockerror', (event) => this.onError(event), false);
 
-        this.instructions.addEventListener("click", (event) => this.onClick(event), false)
+        this.blocker.addEventListener("click", (event) => this.onClick(event), false)
     }
 
     onChange(event) {
