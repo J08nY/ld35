@@ -3,45 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <title>Transmuto</title>
+    <link rel="stylesheet" type="text/css" href="index.css"/>
     <script type="text/javascript" src="three_js/dist/three.min.js"></script>
     <script type="text/javascript" src="three_js/src/Detector.js"></script>
+    <script type="text/javascript" src="three_js/dist/PointerLockControls.js"></script>
     <script type="text/javascript" src="physi_js/physi.js"></script>
 </head>
 <body>
-<script id="fragment_shader" type="x-shader/x-fragment">
+<div id="block">
 
-			uniform float time;
-			uniform vec2 resolution;
+    <div id="instructions">
+        <span style="font-size:40px">Transmuto</span>
+    </div>
 
-			varying vec2 vUv;
-
-			void main( void ) {
-
-				vec2 position = -1.0 + 2.0 * vUv;
-
-				float red = abs( sin( position.x * position.y + time / 5.0 ) );
-				float green = abs( sin( position.x * position.y + time / 4.0 ) );
-				float blue = abs( sin( position.x * position.y + time / 3.0 ) );
-				gl_FragColor = vec4( red, green, blue, 1.0 );
-
-			}
-
-
-
-</script>
-<script id="vertex_shader" type="x-shader/x-vertex">
-
-			varying vec2 vUv;
-
-			void main()
-			{
-				vUv = uv;
-				vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-				gl_Position = projectionMatrix * mvPosition;
-			}
-
-
-</script>
+</div>
+<script id="vertex_shader" type="x-shader/x-vertex" src="shader/vertex_shader.vert"></script>
+<script id="world_shader" type="x-shader/x-fragment" src="shader/world_shader.frag"></script>
+<script id="player_shader" type="x-shader/x-fragment" src="shader/player_shader.frag"></script>
+<script id="enemy_shader" type="x-shader/x-fragment" src="shader/enemy_shader.frag"></script>
 <script type="text/javascript" src="game.js"></script>
 </body>
 </html>

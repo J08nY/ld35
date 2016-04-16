@@ -1,5 +1,5 @@
-/// <reference path="three_js/ts/three.d.ts"/>
-/// <reference path="three_js/ts/detector.d.ts"/>
+/// <reference path="../three_js/ts/three.d.ts"/>
+/// <reference path="../three_js/ts/detector.d.ts"/>
 
 import {Player} from "./Player";
 import {World} from "./World";
