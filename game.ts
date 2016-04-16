@@ -114,38 +114,38 @@ class Keyboard {
         }
     }
 
-    onKeyDown(event) {
+    onKeyDown = (event:KeyboardEvent) => {
         var key = Keyboard.keyName(event.keyCode);
         if (!this.status[key])
             this.status[key] = {down: false, pressed: false, up: false, updatedPreviously: false};
-    }
+    };
 
-    onKeyUp(event) {
+    onKeyUp = (event:KeyboardEvent) => {
         var key = Keyboard.keyName(event.keyCode);
         if (this.status[key])
             this.status[key].pressed = false;
-    }
+    };
 
-    down(key) {
+    down(key):boolean {
         return (this.status[key] && this.status[key].down);
     }
 
-    pressed(key) {
+    pressed(key):boolean {
         return (this.status[key] && this.status[key].pressed);
     }
 
-    up(key) {
+    up(key):boolean {
         return (this.status[key] && this.status[key].up);
     }
 
     register() {
-        document.addEventListener("keydown", (event) => this.onKeyDown(event), false);
-        document.addEventListener("keyup", (event) => this.onKeyUp(event), false);
+        document.addEventListener("keydown", this.onKeyDown, false);
+        document.addEventListener("keyup", this.onKeyUp, false);
     }
 
     unregister() {
-        document.removeEventListener("keydown", (event) => this.onKeyDown(event), false);
-        document.removeEventListener("keyup", (event) => this.onKeyUp(event), false);
+        document.removeEventListener("keydown", this.onKeyDown, false);
+        document.removeEventListener("keyup", this.onKeyUp, false);
     }
 
     static keyName(keyCode) {
@@ -155,65 +155,99 @@ class Keyboard {
     }
 }
 
+enum MouseButton{
+    LEFT,
+    RIGHT,
+    MIDDLE
+}
+
 class Mouse {
     x:number;
     y:number;
-    xMovement:number;
-    yMovement:number;
-    private buttons: {};
+    xMovement:number = 0;
+    yMovement:number = 0;
+    private buttons = {};
 
     constructor() {
 
     }
 
-    onMouseMove = (event: MouseEvent) => {
+    onMouseMove = (event:MouseEvent) => {
         this.x = event.screenX;
         this.xMovement = event.movementX;
         this.y = event.screenY;
         this.yMovement = event.movementY;
-        console.log(this.x + " " + this.y + " :: " + this.xMovement + " " + this.yMovement);
+//        console.log(this.x + " " + this.y + " :: " + this.xMovement + " " + this.yMovement);
     };
+
+    onMouseDown = (event:MouseEvent) => {
+        this.buttons[event.button] = true;
+    };
+
+    onMouseUp = (event:MouseEvent) => {
+        this.buttons[event.button] = false;
+    };
+
+    pressed(button:MouseButton):boolean {
+        return this.buttons[button];
+    }
 
     register() {
         document.addEventListener("mousemove", this.onMouseMove, false);
+        document.addEventListener("mousedown", this.onMouseDown, false);
+        document.addEventListener("mouseup", this.onMouseUp, false);
     }
 
     unregister() {
         document.removeEventListener("mousemove", this.onMouseMove, false);
+        document.removeEventListener("mousedown", this.onMouseDown, false);
+        document.removeEventListener("mouseup", this.onMouseUp, false);
     }
+
 }
 
 
 class Morph extends Physijs.SphereMesh {
+    static levels:number[] = [4, 6, 12, 20];
 
-    constructor(public faces:number, material?:THREE.Material, mass?:number) {
-        super(Morph.generateGeometry(faces), material, mass);
+
+    constructor(public level:number, material?:THREE.Material, mass?:number) {
+        super(Morph.generateGeometry(level), material, mass);
     }
 
-    static generateGeometry(numFaces:number):THREE.Geometry {
-        if (numFaces == 4) {
-            return new THREE.TetrahedronGeometry();
-        } else if (numFaces == 6) {
-            return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2);
-        } else if (numFaces == 12) {
-            return new THREE.DodecahedronGeometry(1, 0);
-        } else if (numFaces == 20) {
-            return new THREE.IcosahedronGeometry(1, 0);
+    static generateGeometry(level:number):THREE.Geometry {
+        let numFaces = Morph.levels[level];
+
+        switch (numFaces) {
+            case 4:
+                return new THREE.TetrahedronGeometry();
+            case 6:
+                return new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
+            case 12:
+                return new THREE.DodecahedronGeometry(1, 0);
+            case 20:
+                return new THREE.IcosahedronGeometry(1, 0);
+            default:
+                return new THREE.TetrahedronGeometry();
         }
-        return null;
     }
 
-    private updateGeometry(numFaces:number) {
-        this.faces = numFaces;
-        this.geometry = Morph.generateGeometry(this.faces);
+    private updateGeometry() {
+        this.geometry = Morph.generateGeometry(this.level);
     }
 
-    shrink(numFaces:number):void {
-        this.updateGeometry(this.faces - numFaces);
+    shrink():void {
+        if (this.level > 1) {
+            this.level--;
+            this.updateGeometry();
+        }
     }
 
-    grow(numFaces:number):void {
-        this.updateGeometry(this.faces + numFaces);
+    grow():void {
+        if (this.level < 3) {
+            this.level++;
+            this.updateGeometry();
+        }
     }
 
 }
@@ -221,12 +255,12 @@ class Morph extends Physijs.SphereMesh {
 class Enemy extends Morph {
 
     constructor() {
-        super(6, Physijs.createMaterial(
+        super(0, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
                 color: 0xb02000
             }),
             .8,
-            .3
+            .6
         ), 2);
     }
 
@@ -244,20 +278,27 @@ class Enemy extends Morph {
 }
 
 class Player extends Morph {
+    minus:number;
+    plus:number;
+    life:number;
+    direction:Vector3 = new Vector3(0, 0, -1);
+    upward:Vector3 = new Vector3(0, 1, 0);
+    camera:Vector3 = new Vector3(0, 10, 10);
+    speed:number = 15;
 
     constructor() {
 
-        super(20, Physijs.createMaterial(
+        super(1, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
                 color: 0x00a0b0
             }),
             .8,
-            .3
-        ), 1);
+            .6
+        ), 0.5);
     }
 
     jump() {
-        this.applyCentralImpulse(new Vector3(0, 20, 0));
+        this.applyCentralImpulse(new Vector3(0, 8, 0));
     }
 
     /*
@@ -305,11 +346,11 @@ class World {
         scene.add(light);
 
 
-        let groundGeometry = new THREE.BoxGeometry(100, 1 ,100);
+        let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
         let groundMaterial = Physijs.createMaterial(
-            new THREE.MeshBasicMaterial({color: 0xeaeaea}),
-            .8,
-            .3
+            new THREE.MeshBasicMaterial({color: 0xdadada}),
+            1,
+            .6
         );
 
         let ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
@@ -333,6 +374,7 @@ class Game {
     camera:THREE.PerspectiveCamera;
     scene:Physijs.Scene;
     player:Player;
+    playerDirection: THREE.ArrowHelper;
 
     world:World;
     state:GameState;
@@ -371,14 +413,18 @@ class Game {
     init():void {
         //init world
         this.scene = new Physijs.Scene;
-        this.scene.setGravity(new THREE.Vector3( 0, -10, 0 ));
+        this.scene.setGravity(new THREE.Vector3(0, -10, 0));
 
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
 
         //init camera
-        this.camera.position.set(5, 5, 5);
+        this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
+
+
+        this.playerDirection = new THREE.ArrowHelper(this.player.direction.clone().normalize(), this.player.position, 5);
+        this.scene.add(this.playerDirection);
 
         this.state = GameState.INITIALIZED;
     }
@@ -407,26 +453,83 @@ class Game {
         //console.log("tick " + delta);
         this.ticks++;
         this.keyboard.update();
+
+        this.camera.position.addVectors(this.player.position, this.player.camera);
+
+
+        if (this.mouse.xMovement != 0) {
+            this.camera.lookAt(this.player.position);
+            this.player.direction.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
+            this.player.camera.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
+            this.playerDirection.setDirection(this.player.direction);
+
+            /* //Please nobody look at this. I am dumb...
+
+             //this.player.camera -> relative position of camera to player
+             //to get rotation, just negate and normalize
+             let dir = this.player.camera.clone().negate().normalize();
+             let newCamera = this.player.camera.clone().applyAxisAngle(new Vector3(0, 1, 0), -this.mouse.xMovement / 180);
+             let up = this.camera.up.clone().add(this.player.camera).applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180).sub(newCamera);
+             let quatr = new THREE.Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), dir);
+             //this.camera.rotateY(this.mouse.xMovement / 180);
+             //this.camera.up.copy(new Vector3(0,1,0));
+             //this.camera.rotation.setFromQuaternion(quatr);
+
+             this.player.direction.applyAxisAngle(new Vector3(0, 1, 0), this.mouse.xMovement / 180);
+             this.player.camera.copy(newCamera);
+             this.camera.lookAt(this.player.position);
+             console.log("A  " + this.camera.up.toArray().toString() + " || " + this.camera.rotation.toArray().toString());
+             //this.camera.up.copy(new Vector3(0,1,0));
+
+             console.log("B  " + this.camera.up.toArray().toString() + " || " + this.camera.rotation.toArray().toString());
+
+             //this.camera.up.copy(up);
+             //this.camera.rotation.setFromQuaternion(quatr);
+
+             let look = this.player.camera.clone().negate().normalize();
+             let right = this.player.direction.clone().cross(this.player.upward).normalize();
+             let angle = this.player.camera.angleTo(this.player.direction);
+             let camUp = this.player.upward.clone().applyAxisAngle(right, -angle);
+
+             this.camera.rotation.copy(
+             new THREE.Euler().setFromVector3(look));
+             this.camera.up.copy(camUp);
+            //rotate tis.player.upward around
+             this.camera.lookAt(this.player.position);
+             console.log(this.camera.rotation);
+             console.log(this.camera.quaternion);
+            //this.camera.rotationAutoUpdate = true;
+             this.camera.quaternion.setFromUnitVectors(new Vector3(0,0,-1), look);
+             this.camera.up.copy(this.player.upward);
+             */
+        }
+
+        let forward = this.player.direction.clone();
+        forward.setLength(this.player.speed);
+        let right = this.player.direction.clone().cross(this.player.upward);
+        right.setLength(this.player.speed);
+
         if (this.keyboard.pressed("W")) {
-            this.player.applyCentralForce(new Vector3(0, 0, -10));
+            this.player.applyCentralForce(forward);
         }
         if (this.keyboard.pressed("S")) {
-            this.player.applyCentralForce(new Vector3(0, 0, 10));
-        }
-        if (this.keyboard.pressed("A")) {
-            this.player.applyCentralForce(new Vector3(-10, 0, 0));
+            this.player.applyCentralForce(forward.negate());
         }
         if (this.keyboard.pressed("D")) {
-            this.player.applyCentralForce(new Vector3(10, 0, 0));
+            this.player.applyCentralForce(right);
         }
-        if(this.keyboard.down("space")){
+        if (this.keyboard.pressed("A")) {
+            this.player.applyCentralForce(right.negate());
+        }
+
+        if (this.keyboard.down("space")) {
             console.log("jump");
             this.player.jump();
         }
 
-        //this.camera.lookAt(this.player.position);
-        this.camera.position.addVectors(this.player.position, new Vector3(5,5,5));
-        this.scene.simulate(undefined, 20);
+
+//        console.log(this.camera.position.addVectors(this.player.position, this.player.camera));
+        this.scene.simulate(undefined, 2);
     }
 
     run(timestamp?):void {

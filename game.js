@@ -72,7 +72,18 @@ var PointerLock = (function () {
 }());
 var Keyboard = (function () {
     function Keyboard() {
+        var _this = this;
         this.status = {};
+        this.onKeyDown = function (event) {
+            var key = Keyboard.keyName(event.keyCode);
+            if (!_this.status[key])
+                _this.status[key] = { down: false, pressed: false, up: false, updatedPreviously: false };
+        };
+        this.onKeyUp = function (event) {
+            var key = Keyboard.keyName(event.keyCode);
+            if (_this.status[key])
+                _this.status[key].pressed = false;
+        };
     }
     Keyboard.prototype.update = function () {
         for (var key in this.status) {
@@ -94,16 +105,6 @@ var Keyboard = (function () {
                 this.status[key].up = true;
         }
     };
-    Keyboard.prototype.onKeyDown = function (event) {
-        var key = Keyboard.keyName(event.keyCode);
-        if (!this.status[key])
-            this.status[key] = { down: false, pressed: false, up: false, updatedPreviously: false };
-    };
-    Keyboard.prototype.onKeyUp = function (event) {
-        var key = Keyboard.keyName(event.keyCode);
-        if (this.status[key])
-            this.status[key].pressed = false;
-    };
     Keyboard.prototype.down = function (key) {
         return (this.status[key] && this.status[key].down);
     };
@@ -114,14 +115,12 @@ var Keyboard = (function () {
         return (this.status[key] && this.status[key].up);
     };
     Keyboard.prototype.register = function () {
-        var _this = this;
-        document.addEventListener("keydown", function (event) { return _this.onKeyDown(event); }, false);
-        document.addEventListener("keyup", function (event) { return _this.onKeyUp(event); }, false);
+        document.addEventListener("keydown", this.onKeyDown, false);
+        document.addEventListener("keyup", this.onKeyUp, false);
     };
     Keyboard.prototype.unregister = function () {
-        var _this = this;
-        document.removeEventListener("keydown", function (event) { return _this.onKeyDown(event); }, false);
-        document.removeEventListener("keyup", function (event) { return _this.onKeyUp(event); }, false);
+        document.removeEventListener("keydown", this.onKeyDown, false);
+        document.removeEventListener("keyup", this.onKeyUp, false);
     };
     Keyboard.keyName = function (keyCode) {
         return (Keyboard.k[keyCode] != null) ?
@@ -139,76 +138,108 @@ var Keyboard = (function () {
     };
     return Keyboard;
 }());
+var MouseButton;
+(function (MouseButton) {
+    MouseButton[MouseButton["LEFT"] = 0] = "LEFT";
+    MouseButton[MouseButton["RIGHT"] = 1] = "RIGHT";
+    MouseButton[MouseButton["MIDDLE"] = 2] = "MIDDLE";
+})(MouseButton || (MouseButton = {}));
 var Mouse = (function () {
     function Mouse() {
         var _this = this;
+        this.xMovement = 0;
+        this.yMovement = 0;
+        this.buttons = {};
         this.onMouseMove = function (event) {
             _this.x = event.screenX;
             _this.xMovement = event.movementX;
             _this.y = event.screenY;
             _this.yMovement = event.movementY;
-            console.log(_this.x + " " + _this.y + " :: " + _this.xMovement + " " + _this.yMovement);
+            //        console.log(this.x + " " + this.y + " :: " + this.xMovement + " " + this.yMovement);
+        };
+        this.onMouseDown = function (event) {
+            _this.buttons[event.button] = true;
+        };
+        this.onMouseUp = function (event) {
+            _this.buttons[event.button] = false;
         };
     }
+    Mouse.prototype.pressed = function (button) {
+        return this.buttons[button];
+    };
     Mouse.prototype.register = function () {
         document.addEventListener("mousemove", this.onMouseMove, false);
+        document.addEventListener("mousedown", this.onMouseDown, false);
+        document.addEventListener("mouseup", this.onMouseUp, false);
     };
     Mouse.prototype.unregister = function () {
         document.removeEventListener("mousemove", this.onMouseMove, false);
+        document.removeEventListener("mousedown", this.onMouseDown, false);
+        document.removeEventListener("mouseup", this.onMouseUp, false);
     };
     return Mouse;
 }());
 var Morph = (function (_super) {
     __extends(Morph, _super);
-    function Morph(faces, material, mass) {
-        _super.call(this, Morph.generateGeometry(faces), material, mass);
-        this.faces = faces;
+    function Morph(level, material, mass) {
+        _super.call(this, Morph.generateGeometry(level), material, mass);
+        this.level = level;
     }
-    Morph.generateGeometry = function (numFaces) {
-        if (numFaces == 4) {
-            return new THREE.TetrahedronGeometry();
+    Morph.generateGeometry = function (level) {
+        var numFaces = Morph.levels[level];
+        switch (numFaces) {
+            case 4:
+                return new THREE.TetrahedronGeometry();
+            case 6:
+                return new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
+            case 12:
+                return new THREE.DodecahedronGeometry(1, 0);
+            case 20:
+                return new THREE.IcosahedronGeometry(1, 0);
+            default:
+                return new THREE.TetrahedronGeometry();
         }
-        else if (numFaces == 6) {
-            return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2);
+    };
+    Morph.prototype.updateGeometry = function () {
+        this.geometry = Morph.generateGeometry(this.level);
+    };
+    Morph.prototype.shrink = function () {
+        if (this.level > 1) {
+            this.level--;
+            this.updateGeometry();
         }
-        else if (numFaces == 12) {
-            return new THREE.DodecahedronGeometry(1, 0);
+    };
+    Morph.prototype.grow = function () {
+        if (this.level < 3) {
+            this.level++;
+            this.updateGeometry();
         }
-        else if (numFaces == 20) {
-            return new THREE.IcosahedronGeometry(1, 0);
-        }
-        return null;
     };
-    Morph.prototype.updateGeometry = function (numFaces) {
-        this.faces = numFaces;
-        this.geometry = Morph.generateGeometry(this.faces);
-    };
-    Morph.prototype.shrink = function (numFaces) {
-        this.updateGeometry(this.faces - numFaces);
-    };
-    Morph.prototype.grow = function (numFaces) {
-        this.updateGeometry(this.faces + numFaces);
-    };
+    Morph.levels = [4, 6, 12, 20];
     return Morph;
 }(Physijs.SphereMesh));
 var Enemy = (function (_super) {
     __extends(Enemy, _super);
     function Enemy() {
-        _super.call(this, 6, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        _super.call(this, 0, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0xb02000
-        }), .8, .3), 2);
+        }), .8, .6), 2);
     }
     return Enemy;
 }(Morph));
 var Player = (function (_super) {
     __extends(Player, _super);
     function Player() {
-        _super.call(this, 20, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        _super.call(this, 1, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
-        }), .8, .3), 1);
+        }), .8, .6), 0.5);
+        this.direction = new Vector3(0, 0, -1);
+        this.upward = new Vector3(0, 1, 0);
+        this.camera = new Vector3(0, 10, 10);
+        this.speed = 15;
     }
     Player.prototype.jump = function () {
-        this.applyCentralImpulse(new Vector3(0, 20, 0));
+        this.applyCentralImpulse(new Vector3(0, 8, 0));
     };
     return Player;
 }(Morph));
@@ -235,8 +266,8 @@ var World = (function () {
         light.shadow.bias = -.0001;
         light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
         scene.add(light);
-        var groundGeometry = new THREE.BoxGeometry(100, 1, 100);
-        var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xeaeaea }), .8, .3);
+        var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
+        var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xdadada }), 1, .6);
         var ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
         scene.add(ground);
         ground.receiveShadow = true;
@@ -279,8 +310,10 @@ var Game = (function () {
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
         //init camera
-        this.camera.position.set(5, 5, 5);
+        this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
+        this.playerDirection = new THREE.ArrowHelper(this.player.direction.clone().normalize(), this.player.position, 5);
+        this.scene.add(this.playerDirection);
         this.state = GameState.INITIALIZED;
     };
     Game.prototype.onWindowResize = function () {
@@ -303,25 +336,35 @@ var Game = (function () {
         //console.log("tick " + delta);
         this.ticks++;
         this.keyboard.update();
+        this.camera.position.addVectors(this.player.position, this.player.camera);
+        if (this.mouse.xMovement != 0) {
+            this.camera.lookAt(this.player.position);
+            this.player.direction.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
+            this.player.camera.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
+            this.playerDirection.setDirection(this.player.direction);
+        }
+        var forward = this.player.direction.clone();
+        forward.setLength(this.player.speed);
+        var right = this.player.direction.clone().cross(this.player.upward);
+        right.setLength(this.player.speed);
         if (this.keyboard.pressed("W")) {
-            this.player.applyCentralForce(new Vector3(0, 0, -10));
+            this.player.applyCentralForce(forward);
         }
         if (this.keyboard.pressed("S")) {
-            this.player.applyCentralForce(new Vector3(0, 0, 10));
-        }
-        if (this.keyboard.pressed("A")) {
-            this.player.applyCentralForce(new Vector3(-10, 0, 0));
+            this.player.applyCentralForce(forward.negate());
         }
         if (this.keyboard.pressed("D")) {
-            this.player.applyCentralForce(new Vector3(10, 0, 0));
+            this.player.applyCentralForce(right);
+        }
+        if (this.keyboard.pressed("A")) {
+            this.player.applyCentralForce(right.negate());
         }
         if (this.keyboard.down("space")) {
             console.log("jump");
             this.player.jump();
         }
-        //this.camera.lookAt(this.player.position);
-        this.camera.position.addVectors(this.player.position, new Vector3(5, 5, 5));
-        this.scene.simulate(undefined, 20);
+        //        console.log(this.camera.position.addVectors(this.player.position, this.player.camera));
+        this.scene.simulate(undefined, 2);
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
