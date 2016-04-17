@@ -18,11 +18,12 @@ var WebGLRenderer = THREE.WebGLRenderer;
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
 var PointerLock = (function () {
-    function PointerLock(game, blocker, instructions) {
+    function PointerLock(game, blocker, instructions, overlay) {
         var _this = this;
         this.game = game;
         this.blocker = blocker;
         this.instructions = instructions;
+        this.overlay = overlay;
         this.hasLock = false;
         this.onChange = function (event) {
             var element = document.body;
@@ -328,7 +329,7 @@ var Mob = (function (_super) {
     __extends(Mob, _super);
     function Mob(pos, level) {
         _super.call(this, pos, level, Mob.mat, 2);
-        this.speeds = [25.5, 20, 17, 14];
+        this.speeds = [25.1, 20, 19, 17];
     }
     Mob.prototype.approach = function (player) {
         var toPlayer = player.position.clone().sub(this.position).normalize();
@@ -361,8 +362,9 @@ var Player = (function (_super) {
         this.camera = new Vector3(0, 7, 10);
         this.heading = 0;
         this.pitch = 0;
+        this.score = 0;
         this.projectiles = [];
-        this.speeds = [25, 21, 18, 15];
+        this.speeds = [25, 24, 22, 20];
         this.listener = new THREE.AudioListener();
         this.add(this.listener);
     }
@@ -444,7 +446,7 @@ var Level = (function (_super) {
             mob.approach(_this.player);
             if (mob.collides(_this.player)) {
                 //collide?
-                _this.player.damage((mob.level + 1) * 3);
+                _this.player.damage((mob.level + 1));
             }
         });
         //tick projectiles and remove them if time out/on hit
@@ -475,6 +477,7 @@ var Level = (function (_super) {
         this.mobs = this.mobs.filter(function (mob) {
             var alive = mob.isAlive();
             if (!alive) {
+                _this.player.score += mob.level;
                 var polys = mob.die();
                 polys.forEach(function (poly) {
                     _this.add(poly);
@@ -510,6 +513,7 @@ var Level = (function (_super) {
     };
     Level.prototype.dispose = function () {
         var _this = this;
+        this.remove(this.ground);
         this.ground.geometry.dispose();
         this.mobs.forEach(function (obj) {
             _this.remove(obj);
@@ -587,6 +591,7 @@ var Game = (function () {
         }
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", this.onWindowResize, false);
+        this.overlay = document.getElementById("overlay");
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
     }
     Game.prototype.init = function () {
@@ -604,6 +609,14 @@ var Game = (function () {
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
+        this.updateOverlay();
+    };
+    Game.prototype.updateOverlay = function () {
+        this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
+        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft();
+        this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
+        this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
+        this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
     };
     /**
      * Just render the scene.
@@ -617,6 +630,9 @@ var Game = (function () {
      */
     Game.prototype.tick = function (delta) {
         this.ticks++;
+        if (this.ticks % 60 == 0) {
+            this.updateOverlay();
+        }
         this.keyboard.update();
         //camera
         this.camera.position.addVectors(this.player.position, this.player.getCamera());
@@ -668,6 +684,7 @@ var Game = (function () {
         if (!this.player.isAlive()) {
             this.stop(false);
         }
+        //next level
         if (this.level.timeLeft() < 0) {
             this.stop(true);
         }
@@ -709,6 +726,7 @@ var Game = (function () {
         this.run();
     };
     Game.prototype.pause = function () {
+        this.updateOverlay();
         this.state = GameState.PAUSED;
         this.keyboard.unregister();
         this.mouse.unregister();
@@ -750,7 +768,8 @@ window.onload = function () {
     //from three.js example(PointerLock), thanks
     var block = document.getElementById("block");
     var instructions = document.getElementById("instructions");
-    var plock = new PointerLock(game, block, instructions);
+    var overlay = document.getElementById("overlay");
+    var plock = new PointerLock(game, block, instructions, overlay);
     plock.gain();
 };
 //# sourceMappingURL=game.js.map

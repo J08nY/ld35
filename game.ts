@@ -19,7 +19,7 @@ Physijs.scripts.ammo = "ammo.js";
 class PointerLock {
     hasLock:boolean = false;
 
-    constructor(private game:Game, private blocker:HTMLElement, private instructions:HTMLElement) {
+    constructor(private game:Game, private blocker:HTMLElement, private instructions:HTMLElement, private overlay:HTMLElement) {
     }
 
     gain() {
@@ -376,7 +376,7 @@ class LiveMorph extends Morph {
 
 class Mob extends LiveMorph {
 
-    speeds:number[] = [25.5, 20, 17, 14];
+    speeds:number[] = [25.1, 20, 19, 17];
 
     static mat:Physijs.Material = Physijs.createMaterial(
         new THREE.MeshBasicMaterial({
@@ -417,10 +417,12 @@ class Player extends LiveMorph {
     heading:number = 0;
     pitch:number = 0;
 
+    score:number = 0;
+
     projectiles:Projectile[] = [];
     listener:THREE.AudioListener;
 
-    speeds:number[] = [25, 21, 18, 15];
+    speeds:number[] = [25, 24, 22, 20];
 
     constructor(pos:Vector3) {
         super(pos, 1, Physijs.createMaterial(
@@ -538,7 +540,7 @@ class Level extends Physijs.Scene {
             mob.approach(this.player);
             if (mob.collides(this.player)) {
                 //collide?
-                this.player.damage((mob.level + 1) * 3);
+                this.player.damage((mob.level + 1));
             }
         });
 
@@ -569,6 +571,7 @@ class Level extends Physijs.Scene {
         this.mobs = this.mobs.filter((mob) => {
             let alive = mob.isAlive();
             if (!alive) {
+                this.player.score+=mob.level;
                 let polys = mob.die();
                 polys.forEach((poly) => {
                     this.add(poly);
@@ -607,6 +610,7 @@ class Level extends Physijs.Scene {
     }
 
     dispose():void {
+        this.remove(this.ground);
         this.ground.geometry.dispose();
 
         this.mobs.forEach((obj) => {
@@ -621,6 +625,7 @@ class Level extends Physijs.Scene {
             this.remove(obj);
             obj.dispose();
         });
+
     }
 
     //unused
@@ -658,6 +663,7 @@ enum GameState {
 class Game {
     private renderer:THREE.Renderer;
     private camera:THREE.PerspectiveCamera;
+    private overlay:HTMLDivElement;
 
     private player:Player;
     private level:Level;
@@ -673,7 +679,6 @@ class Game {
     private maxFPS:number = 60;
 
     private keepRunning:boolean;
-
 
     constructor() {
         if (Detector.webgl) {
@@ -691,6 +696,8 @@ class Game {
         }
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", this.onWindowResize, false);
+
+        this.overlay = <HTMLDivElement>document.getElementById("overlay");
 
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
     }
@@ -714,6 +721,16 @@ class Game {
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
+
+        this.updateOverlay();
+    }
+
+    updateOverlay():void {
+        this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
+        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft();
+        this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
+        this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
+        this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
     }
 
     onWindowResize = () => {
@@ -736,6 +753,10 @@ class Game {
      */
     tick(delta:number):void {
         this.ticks++;
+        if(this.ticks % 60 == 0){
+            this.updateOverlay();
+        }
+
         this.keyboard.update();
 
         //camera
@@ -795,6 +816,7 @@ class Game {
             this.stop(false);
         }
 
+        //next level
         if (this.level.timeLeft() < 0) {
             this.stop(true);
         }
@@ -842,6 +864,7 @@ class Game {
     }
 
     pause() {
+        this.updateOverlay();
         this.state = GameState.PAUSED;
         this.keyboard.unregister();
         this.mouse.unregister();
@@ -889,7 +912,8 @@ window.onload = () => {
     //from three.js example(PointerLock), thanks
     let block = document.getElementById("block");
     let instructions = document.getElementById("instructions");
+    let overlay = document.getElementById("overlay");
 
-    let plock = new PointerLock(game, block, instructions);
+    let plock = new PointerLock(game, block, instructions, overlay);
     plock.gain();
 };

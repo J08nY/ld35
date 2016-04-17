@@ -10,15 +10,24 @@
     <script type="text/javascript" src="physi_js/physi.js"></script>
 </head>
 <body>
-<div id="block">
-
-    <div id="instructions">
-        <span id="name" >Transmuto</span> <br/>
-        WASD to move, mouse to look/aim. <br/>
-        Collect positive and negative polygons, use them to change shape (Q/E). <br/>
-        Your enemies are deadly, shoot them, they are only vulnerable to their own shape. <br/>
+<div id="container">
+    <div id="overlay">
+        <span id="score"></span><br/>
+        <span id="time"></span><br/>
+        ---------------- <br/>
+        <span id="life"></span><br/>
+        <span id="positive"></span><br/>
+        <span id="negative"></span><br/>
     </div>
+    <div id="block">
+        <div id="instructions">
+            <span id="name">Transmuto</span> <br/>
+            WASD to move, mouse to look/aim. <br/>
+            Collect positive and negative polygons, use them to change shape (Q/E). <br/>
+            Your enemies are deadly, shoot them, they are only vulnerable to their own shape. <br/>
+        </div>
 
+    </div>
 </div>
 <script id="vertex_shader" type="x-shader/x-vertex" src="shader/vertex_shader.vert"></script>
 <script id="world_shader" type="x-shader/x-fragment" src="shader/world_shader.frag"></script>
