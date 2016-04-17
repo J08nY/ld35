@@ -48,3 +48,7 @@ body {
     cursor: pointer;
 
 }
+
+#name {
+    font-size: 40px;
+}

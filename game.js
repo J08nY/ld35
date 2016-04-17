@@ -10,6 +10,7 @@ var __extends = (this && this.__extends) || function (d, b) {
 var Vector3 = THREE.Vector3;
 var Material = THREE.Material;
 var Geometry = THREE.Geometry;
+var smoothstep = THREE.Math.smoothstep;
 //wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
@@ -30,7 +31,6 @@ var PointerLock = (function () {
                 if (_this.game.state == GameState.INITIALIZED || _this.game.state == GameState.PAUSED) {
                     _this.game.start();
                 }
-                console.log("gained");
             }
             else {
                 //lost
@@ -42,7 +42,6 @@ var PointerLock = (function () {
                 if (_this.game.state == GameState.STARTED) {
                     _this.game.pause();
                 }
-                console.log("lost");
             }
         };
         this.onError = function (event) {
@@ -182,15 +181,53 @@ var Mouse = (function () {
     };
     return Mouse;
 }());
+var Poly = (function (_super) {
+    __extends(Poly, _super);
+    function Poly(pos) {
+        var _this = this;
+        _super.call(this, Poly.generateGeometry(), Physijs.createMaterial(new THREE.MeshBasicMaterial({
+            color: 0x10a010
+        }), 1, 1), 0.1);
+        this.pos = pos;
+        this.addEventListener("ready", function () { return _this.init(); });
+    }
+    Poly.prototype.init = function () {
+        //launch the poly into space
+        this.position.copy(this.pos);
+        this.setLinearVelocity(Poly.generateDirection().normalize());
+    };
+    Poly.generateDirection = function () {
+        var verts = [];
+        for (var i = 0; i < 3; i++) {
+            verts.push(Math.random());
+        }
+        return new Vector3().fromArray(verts);
+    };
+    Poly.generateGeometry = function () {
+        //generate two random verts, construct a triangle
+        var geom = new THREE.Geometry();
+        geom.vertices.push(new Vector3());
+        geom.vertices.push(Poly.generateDirection());
+        geom.vertices.push(Poly.generateDirection());
+        geom.faces.push(new THREE.Face3(0, 1, 2));
+        return geom;
+    };
+    return Poly;
+}(Physijs.PlaneMesh));
 /**
  *
  */
 var Morph = (function (_super) {
     __extends(Morph, _super);
     function Morph(level, material, mass) {
+        var _this = this;
         _super.call(this, Morph.generateGeometry(level), material, mass);
         this.level = level;
+        this.radius = this.geometry.boundingSphere.radius;
+        this.addEventListener("ready", function () { return _this.init(); });
     }
+    Morph.prototype.init = function () {
+    };
     Morph.generateGeometry = function (level) {
         var numFaces = Morph.levels[level];
         switch (numFaces) {
@@ -199,15 +236,17 @@ var Morph = (function (_super) {
             case 6:
                 return new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
             case 12:
-                return new THREE.DodecahedronGeometry(1, 0);
-            case 20:
                 return new THREE.IcosahedronGeometry(1, 0);
+            case 20:
+                return new THREE.DodecahedronGeometry(1, 0);
             default:
                 return new THREE.TetrahedronGeometry();
         }
     };
     Morph.prototype.updateGeometry = function () {
         this.geometry = Morph.generateGeometry(this.level);
+        this.geometry.computeBoundingSphere();
+        this.radius = this.geometry.boundingSphere.radius;
     };
     Morph.prototype.shrink = function () {
         if (this.level > 0) {
@@ -220,6 +259,9 @@ var Morph = (function (_super) {
             this.level++;
             this.updateGeometry();
         }
+    };
+    Morph.prototype.collides = function (other) {
+        return this.position.clone().sub(other.position).length() < this.radius + other.radius;
     };
     Morph.levels = [4, 6, 12, 20];
     return Morph;
@@ -238,13 +280,32 @@ var Projectile = (function (_super) {
         this.time = 0;
         this.position.copy(pos.clone().add(dir.clone().setLength(2)));
     }
-    Projectile.prototype.shoot = function () {
+    Projectile.prototype.init = function () {
+        this.launch();
+    };
+    ;
+    Projectile.prototype.launch = function () {
         this.setLinearVelocity(this.dir);
     };
     Projectile.prototype.tick = function (delta) {
         this.time += delta;
     };
     return Projectile;
+}(Morph));
+var LiveMorph = (function (_super) {
+    __extends(LiveMorph, _super);
+    function LiveMorph() {
+        _super.apply(this, arguments);
+        this.life = 100;
+    }
+    LiveMorph.prototype.damage = function (by) {
+        if (this.isAlive())
+            this.life -= by;
+    };
+    LiveMorph.prototype.isAlive = function () {
+        return this.life > 0;
+    };
+    return LiveMorph;
 }(Morph));
 /**
  *
@@ -253,30 +314,47 @@ var Enemy = (function (_super) {
     __extends(Enemy, _super);
     function Enemy() {
         _super.call(this, 0, Physijs.createMaterial(new THREE.MeshBasicMaterial({
-            color: 0xb02000
+            color: 0xa01b00
         }), .8, .6), 2);
-        this.speed = 10;
+        this.speed = 20;
     }
     Enemy.prototype.approach = function (player) {
         var toPlayer = player.position.clone().sub(this.position).normalize();
         this.setLinearVelocity(toPlayer.setLength(this.speed));
     };
+    Enemy.prototype.die = function () {
+        var polys = [];
+        var amount = Math.floor(Math.random() * 10);
+        for (var i = 0; i < amount; i++) {
+            var poly = new Poly(this.position);
+            polys.push(poly);
+        }
+        return polys;
+    };
     return Enemy;
-}(Morph));
+}(LiveMorph));
 var Player = (function (_super) {
     __extends(Player, _super);
     function Player() {
         _super.call(this, 1, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
         }), 1, 0.1), 0.5);
+        this.minus = 0;
+        this.plus = 0;
+        this.speed = 25;
         this.forward = new Vector3(0, 0, -1);
         this.upward = new Vector3(0, 1, 0);
-        this.camera = new Vector3(0, 10, 10);
+        this.camera = new Vector3(0, 7, 10);
         this.heading = 0;
         this.pitch = 0;
-        this.speed = 25;
         this.projectiles = [];
+        this.listener = new THREE.AudioListener();
+        this.add(this.listener);
     }
+    Player.prototype.init = function () {
+        this.castShadow = true;
+        this.setDamping(0.05, 0.05);
+    };
     Player.prototype.jump = function () {
         this.applyCentralImpulse(new Vector3(0, 8, 0));
     };
@@ -292,16 +370,19 @@ var Player = (function (_super) {
         }
     };
     Player.prototype.getRight = function () {
-        return this.getDirection().cross(this.upward).normalize();
+        return this.getForward().cross(this.upward).normalize();
     };
     Player.prototype.getDirection = function () {
+        return this.getForward().applyAxisAngle(this.getRight(), this.pitch);
+    };
+    Player.prototype.getForward = function () {
         return this.forward.clone().applyAxisAngle(this.upward, this.heading);
     };
     Player.prototype.getCamera = function () {
         return this.camera.clone().applyAxisAngle(this.upward, this.heading).applyAxisAngle(this.getRight(), this.pitch);
     };
     return Player;
-}(Morph));
+}(LiveMorph));
 var World = (function (_super) {
     __extends(World, _super);
     function World(player) {
@@ -310,15 +391,13 @@ var World = (function (_super) {
         this.mobs = [];
         this.projectiles = [];
         this.setGravity(new THREE.Vector3(0, -40, 0));
+        player.position.set(0, player.radius, 0);
         this.add(player);
-        player.position.set(0, 2, 0);
-        player.castShadow = true;
-        player.setDamping(0.05, 0.05);
         for (var i = 0; i < 10; i++) {
             var enemy = new Enemy();
             var x = Math.floor(Math.random() * 20 + 3);
             var z = Math.floor(Math.random() * 20 + 3);
-            enemy.position.set(x, 2, z);
+            enemy.position.set(x, enemy.radius, z);
             this.add(enemy);
             this.mobs.push(enemy);
         }
@@ -348,24 +427,48 @@ var World = (function (_super) {
             var projectile = this.player.projectiles.pop();
             this.projectiles.push(projectile);
             this.add(projectile);
-            projectile.shoot();
         }
         //enemy movement
         this.mobs.forEach(function (mob) {
             mob.approach(_this.player);
-        });
-        //tick projectiles and remove them if time out
-        //todo fix projectile removal, now ammojs spams obj s undefined
-        /*
-        this.projectiles.filter((projectile) => {
-            projectile.tick(delta);
-            let keep = projectile.time < 10 * 1000;
-            if (!keep) {
-                this.remove(projectile);
+            if (mob.collides(_this.player)) {
+                //collide?
+                _this.player.damage((mob.level + 1) * 3);
             }
-            return keep;
         });
-        */
+        //tick projectiles and remove them if time out/on hit
+        this.projectiles = this.projectiles.filter(function (projectile) {
+            projectile.tick(delta);
+            var keep = projectile.time < 10 * 1000;
+            var collided = false;
+            if (!keep) {
+                _this.remove(projectile);
+            }
+            else {
+                for (var _i = 0, _a = _this.mobs; _i < _a.length; _i++) {
+                    var mob = _a[_i];
+                    if (mob.collides(projectile)) {
+                        collided = true;
+                        if (mob.level == projectile.level) {
+                            mob.damage((projectile.level + 1) * 10);
+                        }
+                        break;
+                    }
+                }
+            }
+            return keep && !collided;
+        });
+        this.mobs = this.mobs.filter(function (mob) {
+            var alive = mob.isAlive();
+            if (!alive) {
+                var polys = mob.die();
+                polys.forEach(function (poly) {
+                    _this.add(poly);
+                });
+                _this.remove(mob);
+            }
+            return alive;
+        });
         //physijs
         this.simulate(delta, 1);
     };
@@ -432,7 +535,7 @@ var Game = (function () {
         this.camera.position.addVectors(this.player.position, this.player.getCamera());
         this.camera.lookAt(this.player.position);
         //player movement
-        var forward = this.player.getDirection();
+        var forward = this.player.getForward();
         forward.setLength(this.player.speed);
         var right = forward.clone().cross(this.player.upward);
         right.setLength(this.player.speed);
@@ -463,7 +566,15 @@ var Game = (function () {
             console.log("jump");
             this.player.jump();
         }
+        //debug shoot
+        if (this.keyboard.down("C")) {
+            this.player.click(THREE.MOUSE.LEFT);
+        }
         this.world.tick(delta);
+        //die!
+        if (!this.player.isAlive()) {
+            this.stop();
+        }
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
@@ -507,13 +618,21 @@ var Game = (function () {
         this.mouse.unregister();
         this.keepRunning = false;
     };
-    Game.prototype.stop = function () {
+    Game.prototype.stop = function (result) {
+        if (result === void 0) { result = false; }
         this.pause();
         this.state = GameState.STOPPED;
         this.mouse.unregister();
         this.keyboard.unregister();
         window.removeEventListener("resize", this.onWindowResize, false);
-        //todo
+        var blocker = document.getElementById("block");
+        blocker.style.display = '-webkit-box';
+        blocker.style.display = '-moz-box';
+        blocker.style.display = 'box';
+        var instructions = document.getElementById("instructions");
+        instructions.style.fontSize = "40px";
+        instructions.innerHTML = result ? "You won!" : "You lost!";
+        instructions.style.display = "";
     };
     return Game;
 }());
