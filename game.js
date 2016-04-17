@@ -11,6 +11,8 @@ var Vector3 = THREE.Vector3;
 var Material = THREE.Material;
 var Geometry = THREE.Geometry;
 var smoothstep = THREE.Math.smoothstep;
+var TetrahedronGeometry = THREE.TetrahedronGeometry;
+var Face3 = THREE.Face3;
 //wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
@@ -183,24 +185,25 @@ var Mouse = (function () {
 }());
 var Poly = (function (_super) {
     __extends(Poly, _super);
-    function Poly(pos) {
+    function Poly(pos, polarity) {
         var _this = this;
         _super.call(this, Poly.generateGeometry(), Physijs.createMaterial(new THREE.MeshBasicMaterial({
-            color: 0x10a010
-        }), 1, 1), 0.1);
+            color: polarity > 0 ? 0x0010a0 : 0xa01000
+        }), 1, 1), 0.3);
         this.pos = pos;
+        this.polarity = polarity;
         this.addEventListener("ready", function () { return _this.init(); });
     }
     Poly.prototype.init = function () {
         //launch the poly into space
-        this.position.copy(this.pos);
         this.setLinearVelocity(Poly.generateDirection().normalize());
     };
     Poly.generateDirection = function () {
         var verts = [];
         for (var i = 0; i < 3; i++) {
-            verts.push(Math.random());
+            verts.push(Math.random() * (Math.random() > 0.5 ? 1 : -1));
         }
+        verts[1] = Math.abs(verts[1]);
         return new Vector3().fromArray(verts);
     };
     Poly.generateGeometry = function () {
@@ -212,21 +215,23 @@ var Poly = (function (_super) {
         geom.faces.push(new THREE.Face3(0, 1, 2));
         return geom;
     };
+    Poly.prototype.collides = function (other) {
+        return this.position.clone().sub(other.position).lengthSq() <= ((other.radius) ^ 2);
+    };
     return Poly;
 }(Physijs.PlaneMesh));
-/**
- *
- */
 var Morph = (function (_super) {
     __extends(Morph, _super);
-    function Morph(level, material, mass) {
+    function Morph(pos, level, material, mass) {
         var _this = this;
         _super.call(this, Morph.generateGeometry(level), material, mass);
         this.level = level;
         this.radius = this.geometry.boundingSphere.radius;
+        this.position.copy(pos);
         this.addEventListener("ready", function () { return _this.init(); });
     }
     Morph.prototype.init = function () {
+        this.castShadow = true;
     };
     Morph.generateGeometry = function (level) {
         var numFaces = Morph.levels[level];
@@ -261,24 +266,20 @@ var Morph = (function (_super) {
         }
     };
     Morph.prototype.collides = function (other) {
-        return this.position.clone().sub(other.position).length() < this.radius + other.radius;
+        return this.position.clone().sub(other.position).length() <= (this.radius + other.radius);
     };
     Morph.levels = [4, 6, 12, 20];
     return Morph;
 }(Physijs.SphereMesh));
-/**
- *
- */
 var Projectile = (function (_super) {
     __extends(Projectile, _super);
     function Projectile(pos, dir, level) {
-        _super.call(this, level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        _super.call(this, pos.clone().add(dir.clone().setLength(2)), level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x303030
         }), 0.5, 0.3), 0.01);
         this.pos = pos;
         this.dir = dir;
         this.time = 0;
-        this.position.copy(pos.clone().add(dir.clone().setLength(2)));
     }
     Projectile.prototype.init = function () {
         this.launch();
@@ -305,49 +306,50 @@ var LiveMorph = (function (_super) {
     LiveMorph.prototype.isAlive = function () {
         return this.life > 0;
     };
+    LiveMorph.prototype.getSpeed = function () {
+        return this.speeds[this.level];
+    };
     return LiveMorph;
 }(Morph));
-/**
- *
- */
-var Enemy = (function (_super) {
-    __extends(Enemy, _super);
-    function Enemy() {
-        _super.call(this, 0, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+var Mob = (function (_super) {
+    __extends(Mob, _super);
+    function Mob(pos, level) {
+        _super.call(this, pos, level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0xa01b00
         }), .8, .6), 2);
-        this.speed = 20;
+        this.speeds = [25.5, 20, 17, 14];
     }
-    Enemy.prototype.approach = function (player) {
+    Mob.prototype.approach = function (player) {
         var toPlayer = player.position.clone().sub(this.position).normalize();
-        this.setLinearVelocity(toPlayer.setLength(this.speed));
+        this.setLinearVelocity(toPlayer.setLength(this.getSpeed()));
     };
-    Enemy.prototype.die = function () {
+    Mob.prototype.die = function () {
         var polys = [];
-        var amount = Math.floor(Math.random() * 10);
+        var amount = Math.floor(Math.random() * 10) + 3;
         for (var i = 0; i < amount; i++) {
-            var poly = new Poly(this.position);
+            var poly = new Poly(this.position, Math.random() > 0.5 ? 1 : -1);
+            poly.position.copy(this.position);
             polys.push(poly);
         }
         return polys;
     };
-    return Enemy;
+    return Mob;
 }(LiveMorph));
 var Player = (function (_super) {
     __extends(Player, _super);
-    function Player() {
-        _super.call(this, 1, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+    function Player(pos) {
+        _super.call(this, pos, 1, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
         }), 1, 0.1), 0.5);
-        this.minus = 0;
-        this.plus = 0;
-        this.speed = 25;
+        this.minus = 5;
+        this.plus = 5;
         this.forward = new Vector3(0, 0, -1);
         this.upward = new Vector3(0, 1, 0);
         this.camera = new Vector3(0, 7, 10);
         this.heading = 0;
         this.pitch = 0;
         this.projectiles = [];
+        this.speeds = [25, 21, 18, 15];
         this.listener = new THREE.AudioListener();
         this.add(this.listener);
     }
@@ -383,25 +385,29 @@ var Player = (function (_super) {
     };
     return Player;
 }(LiveMorph));
-var World = (function (_super) {
-    __extends(World, _super);
-    function World(player) {
+var Level = (function (_super) {
+    __extends(Level, _super);
+    function Level(player, level) {
         _super.call(this);
         this.player = player;
+        this.level = level;
         this.mobs = [];
         this.projectiles = [];
+        this.polygons = [];
+        //private bounds:Geometry[] = [];
+        this.time = 0;
         this.setGravity(new THREE.Vector3(0, -40, 0));
-        player.position.set(0, player.radius, 0);
         this.add(player);
-        for (var i = 0; i < 10; i++) {
-            var enemy = new Enemy();
-            var x = Math.floor(Math.random() * 20 + 3);
-            var z = Math.floor(Math.random() * 20 + 3);
-            enemy.position.set(x, enemy.radius, z);
-            this.add(enemy);
-            this.mobs.push(enemy);
+        for (var i = 0; i < 15; i++) {
+            var a = Math.random() > 0.5 ? -1 : 1;
+            var b = Math.random() > 0.5 ? -1 : 1;
+            var x = Math.floor(Math.random() * 20 + 10);
+            var z = Math.floor(Math.random() * 20 + 10);
+            var size = Math.floor(Math.random() * 4);
+            this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
         }
-        var light = new THREE.DirectionalLight(0xFFFFFF);
+        /*
+        let light:any = new THREE.DirectionalLight(0xFFFFFF);
         light.position.set(20, 40, -15);
         light.target.position.copy(player.position);
         light.castShadow = true;
@@ -412,16 +418,22 @@ var World = (function (_super) {
         light.shadow.camera.near = 20;
         light.shadow.camera.far = 200;
         light.shadow.bias = -.0001;
-        light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
+        light.shadow.mapSize.width = light.shadow.mapSize.height = 4096;
         this.add(light);
+        */
         var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
-        var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xdadada }), 1, 1);
-        var ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
+        var ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         ground.receiveShadow = true;
         this.add(ground);
     }
-    World.prototype.tick = function (delta) {
+    Level.prototype.spawnMob = function (where, size) {
+        var mob = new Mob(where, size);
+        this.add(mob);
+        this.mobs.push(mob);
+    };
+    Level.prototype.tick = function (delta) {
         var _this = this;
+        this.time += delta;
         //push projectiles queued from player into the world.
         while (this.player.projectiles.length > 0) {
             var projectile = this.player.projectiles.pop();
@@ -448,13 +460,16 @@ var World = (function (_super) {
                 for (var _i = 0, _a = _this.mobs; _i < _a.length; _i++) {
                     var mob = _a[_i];
                     if (mob.collides(projectile)) {
-                        collided = true;
                         if (mob.level == projectile.level) {
+                            collided = true;
                             mob.damage((projectile.level + 1) * 10);
+                            break;
                         }
-                        break;
                     }
                 }
+            }
+            if (collided) {
+                _this.remove(projectile);
             }
             return keep && !collided;
         });
@@ -464,15 +479,58 @@ var World = (function (_super) {
                 var polys = mob.die();
                 polys.forEach(function (poly) {
                     _this.add(poly);
+                    poly.init();
+                    _this.polygons.push(poly);
                 });
                 _this.remove(mob);
             }
             return alive;
         });
+        this.polygons = this.polygons.filter(function (poly) {
+            if (poly.collides(_this.player)) {
+                if (poly.polarity > 0) {
+                    _this.player.plus += 1;
+                }
+                else {
+                    _this.player.minus += 1;
+                }
+                _this.remove(poly);
+                return false;
+            }
+            return true;
+        });
         //physijs
         this.simulate(delta, 1);
     };
-    return World;
+    Level.prototype.timeLeft = function () {
+        return Level.durations[this.level] - (this.time / 1000);
+    };
+    //unused
+    Level.generateGeometry = function (level) {
+        switch (level) {
+            default:
+            case 0:
+                var vertices = [
+                    1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1
+                ];
+                var verts = [];
+                for (var i = 0; i < 4; i++) {
+                    verts.push(new Vector3().fromArray(vertices, i * 3));
+                }
+                var indices = [
+                    0, 1, 2, 2, 3, 0, 0, 3, 1, 1, 3, 2
+                ];
+                var faces = [];
+                for (var i = 0; i < 4; i++) {
+                    faces.push(new Face3(indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]));
+                }
+                return [new THREE.PolyhedronGeometry(verts, faces, 200)];
+        }
+    };
+    Level.durations = [20, 30, 45, 60, -1];
+    Level.numLevels = Level.durations.length;
+    Level.mat = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xcacaca }), 1, 1);
+    return Level;
 }(Physijs.Scene));
 var GameState;
 (function (GameState) {
@@ -507,22 +565,26 @@ var Game = (function () {
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
     }
     Game.prototype.init = function () {
-        //init player and world
-        this.player = new Player();
-        this.world = new World(this.player);
-        //init camera
-        this.camera.position.addVectors(this.player.position, this.player.camera);
-        this.camera.lookAt(this.player.position);
+        //init player
+        this.player = new Player(new Vector3(0, 2, 0));
         //init keyboard and mouse
         this.keyboard = new Keyboard();
         this.mouse = new Mouse(this.player);
         this.state = GameState.INITIALIZED;
+        this.newLevel(0);
+    };
+    Game.prototype.newLevel = function (num) {
+        //init level
+        this.level = new Level(this.player, num);
+        //init camera
+        this.camera.position.addVectors(this.player.position, this.player.camera);
+        this.camera.lookAt(this.player.position);
     };
     /**
      * Just render the scene.
      */
     Game.prototype.render = function () {
-        this.renderer.render(this.world, this.camera);
+        this.renderer.render(this.level, this.camera);
     };
     /**
      * Update logic based on @param delta.
@@ -535,10 +597,11 @@ var Game = (function () {
         this.camera.position.addVectors(this.player.position, this.player.getCamera());
         this.camera.lookAt(this.player.position);
         //player movement
+        var playerSpeed = this.player.getSpeed();
         var forward = this.player.getForward();
-        forward.setLength(this.player.speed);
+        forward.setLength(playerSpeed);
         var right = forward.clone().cross(this.player.upward);
-        right.setLength(this.player.speed);
+        right.setLength(playerSpeed);
         if (this.keyboard.pressed("W")) {
             this.player.applyCentralForce(forward);
         }
@@ -551,29 +614,37 @@ var Game = (function () {
         if (this.keyboard.pressed("A")) {
             this.player.applyCentralForce(right.negate());
         }
-        //clamp speed, TODO into  a method
-        var velocity = this.player.getLinearVelocity().clampLength(-20, 20);
+        //clamp speed, TODO into a method
+        var velocity = this.player.getLinearVelocity().clampLength(-playerSpeed, playerSpeed);
         this.player.setLinearVelocity(velocity);
         //morph!
         if (this.keyboard.down("Q")) {
-            this.player.shrink();
+            if (this.player.minus > 0) {
+                this.player.shrink();
+                this.player.minus--;
+            }
         }
         else if (this.keyboard.down("E")) {
-            this.player.grow();
+            if (this.player.plus > 0) {
+                this.player.grow();
+                this.player.plus--;
+            }
         }
         //jump!
         if (this.keyboard.down("space")) {
-            console.log("jump");
             this.player.jump();
         }
         //debug shoot
         if (this.keyboard.down("C")) {
             this.player.click(THREE.MOUSE.LEFT);
         }
-        this.world.tick(delta);
+        this.level.tick(delta);
         //die!
         if (!this.player.isAlive()) {
-            this.stop();
+            this.stop(false);
+        }
+        if (this.level.timeLeft() < 0) {
+            this.stop(true);
         }
     };
     Game.prototype.run = function (timestamp) {
@@ -622,8 +693,16 @@ var Game = (function () {
         if (result === void 0) { result = false; }
         this.pause();
         this.state = GameState.STOPPED;
-        this.mouse.unregister();
-        this.keyboard.unregister();
+        if (this.level.level != Level.numLevels - 1) {
+            if (result) {
+                //next level, shit!
+                this.newLevel(this.level.level + 1);
+                this.start();
+                return;
+            }
+        }
+        else {
+        }
         window.removeEventListener("resize", this.onWindowResize, false);
         var blocker = document.getElementById("block");
         blocker.style.display = '-webkit-box';

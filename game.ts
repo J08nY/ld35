@@ -7,6 +7,8 @@ import Vector3 = THREE.Vector3;
 import Material = THREE.Material;
 import Geometry = THREE.Geometry;
 import smoothstep = THREE.Math.smoothstep;
+import TetrahedronGeometry = THREE.TetrahedronGeometry;
+import Face3 = THREE.Face3;
 
 //wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
@@ -207,29 +209,29 @@ class Mouse {
 
 class Poly extends Physijs.PlaneMesh {
 
-    constructor(private pos:Vector3) {
+    constructor(private pos:Vector3, public polarity:number) {
         super(Poly.generateGeometry(),
             Physijs.createMaterial(new THREE.MeshBasicMaterial({
-                    color: 0x10a010
+                    color: polarity > 0 ? 0x0010a0 : 0xa01000
                 }),
                 1,
                 1
             ),
-            0.1);
+            0.3);
         this.addEventListener("ready", () => this.init());
     }
 
     init():void {
         //launch the poly into space
-        this.position.copy(this.pos);
         this.setLinearVelocity(Poly.generateDirection().normalize());
     }
 
     static generateDirection():Vector3 {
         let verts = [];
         for (let i = 0; i < 3; i++) {
-            verts.push(Math.random());
+            verts.push(Math.random() * (Math.random() > 0.5 ? 1 : -1));
         }
+        verts[1] = Math.abs(verts[1]);
         return new Vector3().fromArray(verts);
     }
 
@@ -243,22 +245,25 @@ class Poly extends Physijs.PlaneMesh {
         return geom;
     }
 
+    collides(other:Morph):boolean {
+        return this.position.clone().sub(other.position).lengthSq() <= ((other.radius) ^ 2);
+    }
 }
 
-/**
- *
- */
+
 class Morph extends Physijs.SphereMesh {
     radius:number;
     static levels:number[] = [4, 6, 12, 20];
 
-    constructor(public level:number, material?:THREE.Material, mass?:number) {
+    constructor(pos:Vector3, public level:number, material?:THREE.Material, mass?:number) {
         super(Morph.generateGeometry(level), material, mass);
         this.radius = this.geometry.boundingSphere.radius;
+        this.position.copy(pos);
         this.addEventListener("ready", () => this.init());
     }
 
     init():void {
+        this.castShadow = true;
     }
 
     static generateGeometry(level:number):THREE.Geometry {
@@ -299,20 +304,18 @@ class Morph extends Physijs.SphereMesh {
     }
 
     collides(other:Morph):boolean {
-        return this.position.clone().sub(other.position).length() < this.radius + other.radius;
+        return this.position.clone().sub(other.position).length() <= (this.radius + other.radius);
     }
 
 
 }
 
-/**
- *
- */
+
 class Projectile extends Morph {
     time:number = 0;
 
     constructor(private pos:Vector3, private dir:Vector3, level:number) {
-        super(level,
+        super(pos.clone().add(dir.clone().setLength(2)), level,
             Physijs.createMaterial(new THREE.MeshBasicMaterial({
                     color: 0x303030
                 }),
@@ -320,7 +323,6 @@ class Projectile extends Morph {
                 0.3
             ),
             0.01);
-        this.position.copy(pos.clone().add(dir.clone().setLength(2)));
     }
 
     init():void {
@@ -336,8 +338,11 @@ class Projectile extends Morph {
     }
 }
 
+
 class LiveMorph extends Morph {
     life:number = 100;
+
+    speeds:number[];
 
     damage(by:number):void {
         if (this.isAlive())
@@ -347,16 +352,19 @@ class LiveMorph extends Morph {
     isAlive():boolean {
         return this.life > 0;
     }
+
+    getSpeed():number {
+        return this.speeds[this.level];
+    }
 }
 
-/**
- *
- */
-class Enemy extends LiveMorph {
-    speed:number = 20;
 
-    constructor() {
-        super(0, Physijs.createMaterial(
+class Mob extends LiveMorph {
+
+    speeds:number[] = [25.5, 20, 17, 14];
+
+    constructor(pos:Vector3, level:number) {
+        super(pos, level, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
                 color: 0xa01b00
             }),
@@ -367,14 +375,15 @@ class Enemy extends LiveMorph {
 
     approach(player:Player) {
         let toPlayer = player.position.clone().sub(this.position).normalize();
-        this.setLinearVelocity(toPlayer.setLength(this.speed));
+        this.setLinearVelocity(toPlayer.setLength(this.getSpeed()));
     }
 
     die():Poly[] {
         let polys = [];
-        let amount = Math.floor(Math.random() * 10);
+        let amount = Math.floor(Math.random() * 10) + 3;
         for (let i = 0; i < amount; i++) {
-            let poly = new Poly(this.position);
+            let poly = new Poly(this.position, Math.random() > 0.5 ? 1 : -1);
+            poly.position.copy(this.position);
             polys.push(poly);
         }
 
@@ -384,9 +393,8 @@ class Enemy extends LiveMorph {
 }
 
 class Player extends LiveMorph {
-    minus:number = 0;
-    plus:number = 0;
-    speed:number = 25;
+    minus:number = 5;
+    plus:number = 5;
 
     forward:Vector3 = new Vector3(0, 0, -1);
     upward:Vector3 = new Vector3(0, 1, 0);
@@ -397,8 +405,10 @@ class Player extends LiveMorph {
     projectiles:Projectile[] = [];
     listener:THREE.AudioListener;
 
-    constructor() {
-        super(1, Physijs.createMaterial(
+    speeds:number[] = [25, 21, 18, 15];
+
+    constructor(pos:Vector3) {
+        super(pos, 1, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
                 color: 0x00a0b0
             }),
@@ -451,26 +461,40 @@ class Player extends LiveMorph {
 
 }
 
-class World extends Physijs.Scene {
-    private mobs:Enemy[] = [];
+class Level extends Physijs.Scene {
+    private mobs:Mob[] = [];
     private projectiles:Projectile[] = [];
+    private polygons:Poly[] = [];
+    //private bounds:Geometry[] = [];
+    private time:number = 0;
 
-    constructor(private player:Player) {
+    static durations:number[] = [20, 30, 45, 60, -1];
+    static numLevels:number = Level.durations.length;
+
+
+    static mat:Physijs.Material = Physijs.createMaterial(
+        new THREE.MeshBasicMaterial({color: 0xcacaca}),
+        1,
+        1
+    );
+
+    constructor(private player:Player, public level:number) {
         super();
         this.setGravity(new THREE.Vector3(0, -40, 0));
 
-        player.position.set(0, player.radius, 0);
         this.add(player);
 
-        for (let i = 0; i < 10; i++) {
-            let enemy = new Enemy();
-            let x = Math.floor(Math.random() * 20 + 3);
-            let z = Math.floor(Math.random() * 20 + 3);
-            enemy.position.set(x, enemy.radius, z);
-            this.add(enemy);
-            this.mobs.push(enemy);
+        for (let i = 0; i < 15; i++) {
+            let a = Math.random() > 0.5 ? -1 : 1;
+            let b = Math.random() > 0.5 ? -1 : 1;
+            let x = Math.floor(Math.random() * 20 + 10);
+            let z = Math.floor(Math.random() * 20 + 10);
+            let size = Math.floor(Math.random() * 4);
+
+            this.spawnMob(this.player.position.clone().add(new Vector3(a*x, 0, b*z)), size);
         }
 
+        /*
         let light:any = new THREE.DirectionalLight(0xFFFFFF);
         light.position.set(20, 40, -15);
         light.target.position.copy(player.position);
@@ -482,23 +506,24 @@ class World extends Physijs.Scene {
         light.shadow.camera.near = 20;
         light.shadow.camera.far = 200;
         light.shadow.bias = -.0001;
-        light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
+        light.shadow.mapSize.width = light.shadow.mapSize.height = 4096;
         this.add(light);
+        */
 
         let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
-        let groundMaterial = Physijs.createMaterial(
-            new THREE.MeshBasicMaterial({color: 0xdadada}),
-            1,
-            1
-        );
-
-        let ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
+        let ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         ground.receiveShadow = true;
         this.add(ground);
+    }
 
+    spawnMob(where:Vector3, size:number):void {
+        let mob = new Mob(where, size);
+        this.add(mob);
+        this.mobs.push(mob);
     }
 
     tick(delta:number):void {
+        this.time += delta;
 
         //push projectiles queued from player into the world.
         while (this.player.projectiles.length > 0) {
@@ -526,13 +551,16 @@ class World extends Physijs.Scene {
             } else {
                 for (let mob of this.mobs) {
                     if (mob.collides(projectile)) {
-                        collided = true;
                         if (mob.level == projectile.level) {
+                            collided = true;
                             mob.damage((projectile.level + 1) * 10);
+                            break;
                         }
-                        break;
                     }
                 }
+            }
+            if (collided) {
+                this.remove(projectile);
             }
             return keep && !collided;
         });
@@ -543,14 +571,56 @@ class World extends Physijs.Scene {
                 let polys = mob.die();
                 polys.forEach((poly) => {
                     this.add(poly);
+                    poly.init();
+                    this.polygons.push(poly);
                 });
                 this.remove(mob);
             }
             return alive;
         });
 
+        this.polygons = this.polygons.filter((poly) => {
+            if (poly.collides(this.player)) {
+                if (poly.polarity > 0) {
+                    this.player.plus += 1;
+                } else {
+                    this.player.minus += 1;
+                }
+                this.remove(poly);
+                return false;
+            }
+            return true;
+        });
+
         //physijs
         this.simulate(delta, 1);
+    }
+
+    timeLeft():number {
+        return Level.durations[this.level] - (this.time / 1000);
+    }
+
+    //unused
+    static generateGeometry(level:number):THREE.Geometry[] {
+        switch (level) {
+            default:
+            case 0:
+                let vertices = [
+                    1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1
+                ];
+                let verts = [];
+                for (let i = 0; i < 4; i++) {
+                    verts.push(new Vector3().fromArray(vertices, i * 3));
+                }
+                let indices = [
+                    0, 1, 2, 2, 3, 0, 0, 3, 1, 1, 3, 2
+                ];
+                let faces = [];
+                for (let i = 0; i < 4; i++) {
+                    faces.push(new Face3(indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]));
+                }
+                return [new THREE.PolyhedronGeometry(verts, faces, 200)];
+        }
     }
 
 }
@@ -567,7 +637,7 @@ class Game {
     private camera:THREE.PerspectiveCamera;
 
     private player:Player;
-    private world:World;
+    private level:Level;
 
     private keyboard:Keyboard;
     private mouse:Mouse;
@@ -598,19 +668,24 @@ class Game {
     }
 
     init():void {
-        //init player and world
-        this.player = new Player();
-        this.world = new World(this.player);
-
-        //init camera
-        this.camera.position.addVectors(this.player.position, this.player.camera);
-        this.camera.lookAt(this.player.position);
+        //init player
+        this.player = new Player(new Vector3(0, 2, 0));
 
         //init keyboard and mouse
         this.keyboard = new Keyboard();
         this.mouse = new Mouse(this.player);
 
         this.state = GameState.INITIALIZED;
+        this.newLevel(0);
+    }
+
+    newLevel(num:number):void {
+        //init level
+        this.level = new Level(this.player, num);
+
+        //init camera
+        this.camera.position.addVectors(this.player.position, this.player.camera);
+        this.camera.lookAt(this.player.position);
     }
 
     onWindowResize = () => {
@@ -624,7 +699,7 @@ class Game {
      * Just render the scene.
      */
     render():void {
-        this.renderer.render(this.world, this.camera);
+        this.renderer.render(this.level, this.camera);
     }
 
     /**
@@ -640,10 +715,11 @@ class Game {
         this.camera.lookAt(this.player.position);
 
         //player movement
+        let playerSpeed = this.player.getSpeed();
         let forward = this.player.getForward();
-        forward.setLength(this.player.speed);
+        forward.setLength(playerSpeed);
         let right = forward.clone().cross(this.player.upward);
-        right.setLength(this.player.speed);
+        right.setLength(playerSpeed);
 
         if (this.keyboard.pressed("W")) {
             this.player.applyCentralForce(forward);
@@ -657,33 +733,42 @@ class Game {
         if (this.keyboard.pressed("A")) {
             this.player.applyCentralForce(right.negate());
         }
-        //clamp speed, TODO into  a method
-        let velocity = this.player.getLinearVelocity().clampLength(-20, 20);
+        //clamp speed, TODO into a method
+        let velocity = this.player.getLinearVelocity().clampLength(-playerSpeed, playerSpeed);
         this.player.setLinearVelocity(velocity);
 
         //morph!
         if (this.keyboard.down("Q")) {
-            this.player.shrink();
+            if(this.player.minus > 0){
+                this.player.shrink();
+                this.player.minus--;
+            }
         } else if (this.keyboard.down("E")) {
-            this.player.grow();
+            if(this.player.plus > 0){
+                this.player.grow();
+                this.player.plus--;
+            }
         }
 
         //jump!
         if (this.keyboard.down("space")) {
-            console.log("jump");
             this.player.jump();
         }
 
         //debug shoot
-        if (this.keyboard.down("C")){
+        if (this.keyboard.down("C")) {
             this.player.click(THREE.MOUSE.LEFT);
         }
 
-        this.world.tick(delta);
+        this.level.tick(delta);
 
         //die!
         if (!this.player.isAlive()) {
-            this.stop();
+            this.stop(false);
+        }
+
+        if (this.level.timeLeft() < 0) {
+            this.stop(true);
         }
     }
 
@@ -740,8 +825,17 @@ class Game {
         this.pause();
         this.state = GameState.STOPPED;
 
-        this.mouse.unregister();
-        this.keyboard.unregister();
+        if(this.level.level != Level.numLevels - 1){
+            if(result){
+                //next level, shit!
+                this.newLevel(this.level.level+1);
+                this.start();
+                return;
+            }
+        }else{
+            //end game
+        }
+
         window.removeEventListener("resize", this.onWindowResize, false);
 
         let blocker = document.getElementById("block");
