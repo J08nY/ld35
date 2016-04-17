@@ -157,6 +157,7 @@ var Mouse = (function () {
             _this.y = event.screenY;
             _this.yMovement = event.movementY;
             _this.player.rotate(event.movementX);
+            _this.player.look(event.movementY);
         };
         this.onMouseDown = function (event) {
             _this.buttons[event.button] = true;
@@ -231,12 +232,18 @@ var Projectile = (function (_super) {
     function Projectile(pos, dir, level) {
         _super.call(this, level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x303030
-        })), 0);
+        }), 0.5, 0.3), 0.01);
         this.pos = pos;
         this.dir = dir;
-        this.position.copy(pos);
-        this.setLinearVelocity(this.dir);
+        this.time = 0;
+        this.position.copy(pos.clone().add(dir.clone().setLength(2)));
     }
+    Projectile.prototype.shoot = function () {
+        this.setLinearVelocity(this.dir);
+    };
+    Projectile.prototype.tick = function (delta) {
+        this.time += delta;
+    };
     return Projectile;
 }(Morph));
 /**
@@ -248,7 +255,12 @@ var Enemy = (function (_super) {
         _super.call(this, 0, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0xb02000
         }), .8, .6), 2);
+        this.speed = 10;
     }
+    Enemy.prototype.approach = function (player) {
+        var toPlayer = player.position.clone().sub(this.position).normalize();
+        this.setLinearVelocity(toPlayer.setLength(this.speed));
+    };
     return Enemy;
 }(Morph));
 var Player = (function (_super) {
@@ -261,6 +273,7 @@ var Player = (function (_super) {
         this.upward = new Vector3(0, 1, 0);
         this.camera = new Vector3(0, 10, 10);
         this.heading = 0;
+        this.pitch = 0;
         this.speed = 25;
         this.projectiles = [];
     }
@@ -270,31 +283,45 @@ var Player = (function (_super) {
     Player.prototype.rotate = function (xMovement) {
         this.heading -= xMovement * 0.002;
     };
+    Player.prototype.look = function (yMovement) {
+        this.pitch -= yMovement * 0.002;
+    };
     Player.prototype.click = function (button) {
         if (button == THREE.MOUSE.LEFT) {
-            this.projectiles.push(new Projectile(this.position, this.getDirection(), this.level));
+            this.projectiles.push(new Projectile(this.position, this.getDirection().multiplyScalar(35), this.level));
         }
+    };
+    Player.prototype.getRight = function () {
+        return this.getDirection().cross(this.upward).normalize();
     };
     Player.prototype.getDirection = function () {
         return this.forward.clone().applyAxisAngle(this.upward, this.heading);
     };
     Player.prototype.getCamera = function () {
-        return this.camera.clone().applyAxisAngle(this.upward, this.heading);
+        return this.camera.clone().applyAxisAngle(this.upward, this.heading).applyAxisAngle(this.getRight(), this.pitch);
     };
     return Player;
 }(Morph));
 var World = (function (_super) {
     __extends(World, _super);
-    function World(player, camera) {
+    function World(player) {
         _super.call(this);
+        this.player = player;
+        this.mobs = [];
+        this.projectiles = [];
+        this.setGravity(new THREE.Vector3(0, -40, 0));
+        this.add(player);
         player.position.set(0, 2, 0);
         player.castShadow = true;
-        this.add(player);
-        //this.add(camera);
-        var enemy = new Enemy();
-        enemy.position.set(0, 5, 0);
-        enemy.castShadow = true;
-        this.add(enemy);
+        player.setDamping(0.05, 0.05);
+        for (var i = 0; i < 10; i++) {
+            var enemy = new Enemy();
+            var x = Math.floor(Math.random() * 20 + 3);
+            var z = Math.floor(Math.random() * 20 + 3);
+            enemy.position.set(x, 2, z);
+            this.add(enemy);
+            this.mobs.push(enemy);
+        }
         var light = new THREE.DirectionalLight(0xFFFFFF);
         light.position.set(20, 40, -15);
         light.target.position.copy(player.position);
@@ -314,6 +341,31 @@ var World = (function (_super) {
         ground.receiveShadow = true;
         this.add(ground);
     }
+    World.prototype.tick = function (delta) {
+        var _this = this;
+        //push projectiles queued from player into the world.
+        while (this.player.projectiles.length > 0) {
+            var projectile = this.player.projectiles.pop();
+            this.projectiles.push(projectile);
+            this.add(projectile);
+            projectile.shoot();
+        }
+        //enemy movement
+        this.mobs.forEach(function (mob) {
+            mob.approach(_this.player);
+        });
+        //tick projectiles and remove them if time out
+        this.projectiles.filter(function (projectile) {
+            projectile.tick(delta);
+            var keep = projectile.time < 10 * 1000;
+            if (!keep) {
+                _this.remove(projectile);
+            }
+            return keep;
+        });
+        //physijs
+        this.simulate(delta, 1);
+    };
     return World;
 }(Physijs.Scene));
 var GameState;
@@ -331,6 +383,11 @@ var Game = (function () {
         this.lastFrame = 0;
         this.timestep = 1000 / 60;
         this.maxFPS = 60;
+        this.onWindowResize = function () {
+            _this.camera.aspect = window.innerWidth / window.innerHeight;
+            _this.camera.updateProjectionMatrix();
+            _this.renderer.setSize(window.innerWidth, window.innerHeight);
+        };
         this.renderer = new THREE.WebGLRenderer({
             antialias: true
         });
@@ -340,15 +397,13 @@ var Game = (function () {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
-        window.addEventListener("resize", function () { return _this.onWindowResize(); }, false);
+        window.addEventListener("resize", this.onWindowResize, false);
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
     }
     Game.prototype.init = function () {
         //init player and world
         this.player = new Player();
-        this.world = new World(this.player, this.camera);
-        this.world.setGravity(new THREE.Vector3(0, -40, 0));
-        this.player.setDamping(0.05, 0.05);
+        this.world = new World(this.player);
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
@@ -357,16 +412,10 @@ var Game = (function () {
         this.mouse = new Mouse(this.player);
         this.state = GameState.INITIALIZED;
     };
-    Game.prototype.onWindowResize = function () {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-    };
     /**
      * Just render the scene.
      */
     Game.prototype.render = function () {
-        //console.log("render");
         this.renderer.render(this.world, this.camera);
     };
     /**
@@ -411,10 +460,7 @@ var Game = (function () {
             console.log("jump");
             this.player.jump();
         }
-        while (this.player.projectiles.length > 0) {
-            this.world.add(this.player.projectiles.pop());
-        }
-        this.world.simulate(delta, 1);
+        this.world.tick(delta);
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
@@ -441,7 +487,7 @@ var Game = (function () {
         }
         this.render();
         if (this.keepRunning) {
-            requestAnimationFrame(function () { return _this.run(); });
+            requestAnimationFrame(function (time) { return _this.run(time); });
         }
     };
     Game.prototype.start = function () {
@@ -463,6 +509,7 @@ var Game = (function () {
         this.state = GameState.STOPPED;
         this.mouse.unregister();
         this.keyboard.unregister();
+        window.removeEventListener("resize", this.onWindowResize, false);
         //todo
     };
     return Game;
@@ -474,6 +521,7 @@ window.onload = function () {
     var game = new Game();
     game.init();
     //make sure we have pointerlock here
+    //from three.js example(PointerLock), thanks
     var block = document.getElementById("block");
     var instructions = document.getElementById("instructions");
     var plock = new PointerLock(game, block, instructions);

@@ -31,7 +31,7 @@ class PointerLock {
         document.addEventListener('mozpointerlockerror', this.onError, false);
         document.addEventListener('webkitpointerlockerror', this.onError, false);
 
-        this.blocker.addEventListener("click",this.onClick, false)
+        this.blocker.addEventListener("click", this.onClick, false)
     }
 
     onChange = (event) => {
@@ -177,6 +177,7 @@ class Mouse {
         this.y = event.screenY;
         this.yMovement = event.movementY;
         this.player.rotate(event.movementX);
+        this.player.look(event.movementY);
     };
 
     onMouseDown = (event:MouseEvent) => {
@@ -203,7 +204,6 @@ class Mouse {
         document.removeEventListener("mousedown", this.onMouseDown, false);
         document.removeEventListener("mouseup", this.onMouseUp, false);
     }
-
 }
 
 /**
@@ -257,15 +257,26 @@ class Morph extends Physijs.SphereMesh {
  *
  */
 class Projectile extends Morph {
+    time:number = 0;
 
     constructor(private pos:Vector3, private dir:Vector3, level:number) {
         super(level,
-              Physijs.createMaterial(new THREE.MeshBasicMaterial({
-                color: 0x303030
-              })),
-              0);
-        this.position.copy(pos);
+            Physijs.createMaterial(new THREE.MeshBasicMaterial({
+                    color: 0x303030
+                }),
+                0.5,
+                0.3
+            ),
+            0.01);
+        this.position.copy(pos.clone().add(dir.clone().setLength(2)));
+    }
+
+    shoot():void {
         this.setLinearVelocity(this.dir);
+    }
+
+    tick(delta):void {
+        this.time += delta;
     }
 }
 
@@ -273,6 +284,7 @@ class Projectile extends Morph {
  *
  */
 class Enemy extends Morph {
+    speed:number = 10;
 
     constructor() {
         super(0, Physijs.createMaterial(
@@ -283,6 +295,12 @@ class Enemy extends Morph {
             .6
         ), 2);
     }
+
+    approach(player:Player) {
+        let toPlayer = player.position.clone().sub(this.position).normalize();
+        this.setLinearVelocity(toPlayer.setLength(this.speed));
+    }
+
 }
 
 class Player extends Morph {
@@ -293,6 +311,7 @@ class Player extends Morph {
     upward:Vector3 = new Vector3(0, 1, 0);
     camera:Vector3 = new Vector3(0, 10, 10);
     heading:number = 0;
+    pitch:number = 0;
     speed:number = 25;
 
     projectiles:Projectile[] = [];
@@ -317,10 +336,18 @@ class Player extends Morph {
         this.heading -= xMovement * 0.002;
     }
 
+    look(yMovement:number):void {
+        this.pitch -= yMovement * 0.002;
+    }
+
     click(button:number):void {
-        if(button == THREE.MOUSE.LEFT) {
-            this.projectiles.push(new Projectile(this.position, this.getDirection(), this.level));
+        if (button == THREE.MOUSE.LEFT) {
+            this.projectiles.push(new Projectile(this.position, this.getDirection().multiplyScalar(35), this.level));
         }
+    }
+
+    getRight():Vector3 {
+        return this.getDirection().cross(this.upward).normalize();
     }
 
     getDirection():Vector3 {
@@ -328,26 +355,31 @@ class Player extends Morph {
     }
 
     getCamera():Vector3 {
-        return this.camera.clone().applyAxisAngle(this.upward, this.heading);
+        return this.camera.clone().applyAxisAngle(this.upward, this.heading).applyAxisAngle(this.getRight(), this.pitch);
     }
 }
 
-class World extends Physijs.Scene{
+class World extends Physijs.Scene {
+    private mobs:Enemy[] = [];
+    private projectiles:Projectile[] = [];
 
-    constructor(player:Player, camera:THREE.Camera) {
+    constructor(private player:Player) {
         super();
+        this.setGravity(new THREE.Vector3(0, -40, 0));
 
+        this.add(player);
         player.position.set(0, 2, 0);
         player.castShadow = true;
-        this.add(player);
+        player.setDamping(0.05, 0.05);
 
-        //this.add(camera);
-
-        let enemy = new Enemy();
-        enemy.position.set(0, 5, 0);
-        enemy.castShadow = true;
-        this.add(enemy);
-
+        for (let i = 0; i < 10; i++) {
+            let enemy = new Enemy();
+            let x = Math.floor(Math.random() * 20 + 3);
+            let z = Math.floor(Math.random() * 20 + 3);
+            enemy.position.set(x, 2, z);
+            this.add(enemy);
+            this.mobs.push(enemy);
+        }
 
         let light:any = new THREE.DirectionalLight(0xFFFFFF);
         light.position.set(20, 40, -15);
@@ -374,7 +406,33 @@ class World extends Physijs.Scene{
         ground.receiveShadow = true;
         this.add(ground);
 
+    }
 
+    tick(delta:number):void {
+        //push projectiles queued from player into the world.
+        while (this.player.projectiles.length > 0) {
+            let projectile = this.player.projectiles.pop();
+            this.projectiles.push(projectile);
+            this.add(projectile);
+            projectile.shoot();
+        }
+
+        //enemy movement
+        this.mobs.forEach((mob) => {
+            mob.approach(this.player);
+        });
+        //tick projectiles and remove them if time out
+        this.projectiles.filter((projectile) => {
+            projectile.tick(delta);
+            let keep = projectile.time < 10 * 1000;
+            if (!keep) {
+                this.remove(projectile);
+            }
+            return keep;
+        });
+
+        //physijs
+        this.simulate(delta, 1);
     }
 
 }
@@ -416,7 +474,7 @@ class Game {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(this.renderer.domElement);
-        window.addEventListener("resize", () => this.onWindowResize(), false);
+        window.addEventListener("resize", this.onWindowResize, false);
 
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
     }
@@ -424,10 +482,7 @@ class Game {
     init():void {
         //init player and world
         this.player = new Player();
-
-        this.world = new World(this.player, this.camera);
-        this.world.setGravity(new THREE.Vector3(0, -40, 0));
-        this.player.setDamping(0.05, 0.05);
+        this.world = new World(this.player);
 
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
@@ -440,19 +495,17 @@ class Game {
         this.state = GameState.INITIALIZED;
     }
 
-
-    onWindowResize():void {
+    onWindowResize = () => {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+    };
 
     /**
      * Just render the scene.
      */
     render():void {
-        //console.log("render");
         this.renderer.render(this.world, this.camera);
     }
 
@@ -503,12 +556,7 @@ class Game {
             this.player.jump();
         }
 
-        while (this.player.projectiles.length > 0) {
-            this.world.add(this.player.projectiles.pop());
-        }
-
-
-        this.world.simulate(delta, 1);
+        this.world.tick(delta);
     }
 
     run(timestamp?):void {
@@ -537,7 +585,7 @@ class Game {
         }
         this.render();
         if (this.keepRunning) {
-            requestAnimationFrame(() => this.run());
+            requestAnimationFrame((time) => this.run(time));
         }
     }
 
@@ -566,6 +614,7 @@ class Game {
 
         this.mouse.unregister();
         this.keyboard.unregister();
+        window.removeEventListener("resize", this.onWindowResize, false);
         //todo
     }
 }
@@ -577,9 +626,12 @@ if (!Detector.webgl) {
 window.onload = () => {
     let game = new Game();
     game.init();
+
     //make sure we have pointerlock here
+    //from three.js example(PointerLock), thanks
     let block = document.getElementById("block");
     let instructions = document.getElementById("instructions");
+
     let plock = new PointerLock(game, block, instructions);
     plock.gain();
 };
