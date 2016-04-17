@@ -11,30 +11,30 @@ import Geometry = THREE.Geometry;
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
 
+
 class PointerLock {
     hasLock:boolean = false;
 
     constructor(private game:Game, private blocker:HTMLElement, private instructions:HTMLElement) {
     }
 
-
     gain() {
         let havePointerLock = 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
         if (!havePointerLock) {
             return;
         }
-        document.addEventListener('pointerlockchange', (event) => this.onChange(event), false);
-        document.addEventListener('mozpointerlockchange', (event) => this.onChange(event), false);
-        document.addEventListener('webkitpointerlockchange', (event) => this.onChange(event), false);
+        document.addEventListener('pointerlockchange', this.onChange, false);
+        document.addEventListener('mozpointerlockchange', this.onChange, false);
+        document.addEventListener('webkitpointerlockchange', this.onChange, false);
 
-        document.addEventListener('pointerlockerror', (event) => this.onError(event), false);
-        document.addEventListener('mozpointerlockerror', (event) => this.onError(event), false);
-        document.addEventListener('webkitpointerlockerror', (event) => this.onError(event), false);
+        document.addEventListener('pointerlockerror', this.onError, false);
+        document.addEventListener('mozpointerlockerror', this.onError, false);
+        document.addEventListener('webkitpointerlockerror', this.onError, false);
 
-        this.blocker.addEventListener("click", (event) => this.onClick(event), false)
+        this.blocker.addEventListener("click",this.onClick, false)
     }
 
-    onChange(event) {
+    onChange = (event) => {
         let element = document.body;
         let doc:any = document;
 
@@ -59,24 +59,24 @@ class PointerLock {
             }
             console.log("lost");
         }
-    }
+    };
 
-    onError(event) {
+    onError = (event) => {
         this.instructions.style.display = "";
-    }
+    };
 
-    onClick(event) {
+    onClick = (event) => {
         let element:any = document.body;
         element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
         this.instructions.style.display = "none";
 
         element.requestPointerLock();
-    }
+    };
 }
 
 class Keyboard {
     /*
-    Credit to: https://github.com/stemkoski
+     Credit to: https://github.com/stemkoski
      */
     static k = {
         8: "backspace", 9: "tab", 13: "enter", 16: "shift",
@@ -93,7 +93,7 @@ class Keyboard {
 
     }
 
-    update() {
+    update():void {
         for (var key in this.status) {
             // insure that every keypress has "down" status exactly once
             if (!this.status[key].updatedPreviously) {
@@ -141,12 +141,12 @@ class Keyboard {
         return (this.status[key] && this.status[key].up);
     }
 
-    register() {
+    register():void {
         document.addEventListener("keydown", this.onKeyDown, false);
         document.addEventListener("keyup", this.onKeyUp, false);
     }
 
-    unregister() {
+    unregister():void {
         document.removeEventListener("keydown", this.onKeyDown, false);
         document.removeEventListener("keyup", this.onKeyUp, false);
     }
@@ -158,12 +158,9 @@ class Keyboard {
     }
 }
 
-enum MouseButton{
-    LEFT,
-    RIGHT,
-    MIDDLE
-}
-
+/**
+ *
+ */
 class Mouse {
     x:number;
     y:number;
@@ -191,7 +188,7 @@ class Mouse {
         this.buttons[event.button] = false;
     };
 
-    pressed(button:MouseButton):boolean {
+    pressed(button:number):boolean {
         return this.buttons[button];
     }
 
@@ -209,7 +206,9 @@ class Mouse {
 
 }
 
-
+/**
+ *
+ */
 class Morph extends Physijs.SphereMesh {
     static levels:number[] = [4, 6, 12, 20];
 
@@ -234,7 +233,7 @@ class Morph extends Physijs.SphereMesh {
         }
     }
 
-    private updateGeometry() {
+    private updateGeometry():void {
         this.geometry = Morph.generateGeometry(this.level);
     }
 
@@ -254,8 +253,26 @@ class Morph extends Physijs.SphereMesh {
 
 }
 
-class Enemy extends Morph {
+/**
+ *
+ */
+class Projectile extends Morph {
 
+    constructor(private pos:Vector3, private dir:Vector3, level:number) {
+        super(level,
+              Physijs.createMaterial(new THREE.MeshBasicMaterial({
+                color: 0x303030
+              })),
+              0);
+        this.position.copy(pos);
+        this.setLinearVelocity(this.dir);
+    }
+}
+
+/**
+ *
+ */
+class Enemy extends Morph {
 
     constructor() {
         super(0, Physijs.createMaterial(
@@ -278,6 +295,7 @@ class Player extends Morph {
     heading:number = 0;
     speed:number = 25;
 
+    projectiles:Projectile[] = [];
 
     constructor() {
 
@@ -300,7 +318,9 @@ class Player extends Morph {
     }
 
     click(button:number):void {
-
+        if(button == THREE.MOUSE.LEFT) {
+            this.projectiles.push(new Projectile(this.position, this.getDirection(), this.level));
+        }
     }
 
     getDirection():Vector3 {
@@ -312,21 +332,21 @@ class Player extends Morph {
     }
 }
 
-class World {
+class World extends Physijs.Scene{
 
-
-    constructor(player:Player, scene:Physijs.Scene, camera:THREE.Camera) {
+    constructor(player:Player, camera:THREE.Camera) {
+        super();
 
         player.position.set(0, 2, 0);
         player.castShadow = true;
-        scene.add(player);
+        this.add(player);
 
-        //scene.add(camera);
+        //this.add(camera);
 
         let enemy = new Enemy();
         enemy.position.set(0, 5, 0);
         enemy.castShadow = true;
-        scene.add(enemy);
+        this.add(enemy);
 
 
         let light:any = new THREE.DirectionalLight(0xFFFFFF);
@@ -341,7 +361,7 @@ class World {
         light.shadow.camera.far = 200;
         light.shadow.bias = -.0001;
         light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
-        scene.add(light);
+        this.add(light);
 
         let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
         let groundMaterial = Physijs.createMaterial(
@@ -351,8 +371,9 @@ class World {
         );
 
         let ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
-        scene.add(ground);
         ground.receiveShadow = true;
+        this.add(ground);
+
 
     }
 
@@ -366,18 +387,16 @@ enum GameState {
 }
 
 class Game {
-    renderer:THREE.WebGLRenderer;
+    private renderer:THREE.WebGLRenderer;
+    private camera:THREE.PerspectiveCamera;
 
-    camera:THREE.PerspectiveCamera;
-    scene:Physijs.Scene;
-    player:Player;
+    private player:Player;
+    private world:World;
 
-    world:World;
+    private keyboard:Keyboard;
+    private mouse:Mouse;
+
     state:GameState;
-
-    keyboard:Keyboard;
-    mouse:Mouse;
-
     private ticks:number = 0;
     private delta:number = 0;
     private lastFrame:number = 0;
@@ -403,14 +422,11 @@ class Game {
     }
 
     init():void {
-        //init scene
-        this.scene = new Physijs.Scene;
-        this.scene.setGravity(new THREE.Vector3(0, -40, 0));
-
         //init player and world
         this.player = new Player();
 
-        this.world = new World(this.player, this.scene, this.camera);
+        this.world = new World(this.player, this.camera);
+        this.world.setGravity(new THREE.Vector3(0, -40, 0));
         this.player.setDamping(0.05, 0.05);
 
         //init camera
@@ -437,7 +453,7 @@ class Game {
      */
     render():void {
         //console.log("render");
-        this.renderer.render(this.scene, this.camera);
+        this.renderer.render(this.world, this.camera);
     }
 
     /**
@@ -448,9 +464,11 @@ class Game {
         this.ticks++;
         this.keyboard.update();
 
+        //camera
         this.camera.position.addVectors(this.player.position, this.player.getCamera());
         this.camera.lookAt(this.player.position);
 
+        //player movement
         let forward = this.player.getDirection();
         forward.setLength(this.player.speed);
         let right = forward.clone().cross(this.player.upward);
@@ -468,26 +486,29 @@ class Game {
         if (this.keyboard.pressed("A")) {
             this.player.applyCentralForce(right.negate());
         }
+        //clamp speed, TODO into  a method
+        let velocity = this.player.getLinearVelocity().clampLength(-20, 20);
+        this.player.setLinearVelocity(velocity);
 
+        //morph!
         if (this.keyboard.down("Q")) {
             this.player.shrink();
         } else if (this.keyboard.down("E")) {
             this.player.grow();
         }
 
-        //console.log(this.player.getLinearVelocity().length());
-
-        let velocity = this.player.getLinearVelocity().clampLength(-20, 20);
-        this.player.setLinearVelocity(velocity);
-
-
+        //jump!
         if (this.keyboard.down("space")) {
             console.log("jump");
             this.player.jump();
         }
 
+        while (this.player.projectiles.length > 0) {
+            this.world.add(this.player.projectiles.pop());
+        }
 
-        this.scene.simulate(delta, 1);
+
+        this.world.simulate(delta, 1);
     }
 
     run(timestamp?):void {

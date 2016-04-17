@@ -15,58 +15,58 @@ Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
 var PointerLock = (function () {
     function PointerLock(game, blocker, instructions) {
+        var _this = this;
         this.game = game;
         this.blocker = blocker;
         this.instructions = instructions;
         this.hasLock = false;
+        this.onChange = function (event) {
+            var element = document.body;
+            var doc = document;
+            if (doc.pointerLockElement === element || doc.mozPointerLockElement === element || doc.webkitPointerLockElement === element) {
+                //gained
+                _this.hasLock = true;
+                _this.blocker.style.display = "none";
+                if (_this.game.state == GameState.INITIALIZED || _this.game.state == GameState.PAUSED) {
+                    _this.game.start();
+                }
+                console.log("gained");
+            }
+            else {
+                //lost
+                _this.hasLock = false;
+                _this.blocker.style.display = '-webkit-box';
+                _this.blocker.style.display = '-moz-box';
+                _this.blocker.style.display = 'box';
+                _this.instructions.style.display = "";
+                if (_this.game.state == GameState.STARTED) {
+                    _this.game.pause();
+                }
+                console.log("lost");
+            }
+        };
+        this.onError = function (event) {
+            _this.instructions.style.display = "";
+        };
+        this.onClick = function (event) {
+            var element = document.body;
+            element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
+            _this.instructions.style.display = "none";
+            element.requestPointerLock();
+        };
     }
     PointerLock.prototype.gain = function () {
-        var _this = this;
         var havePointerLock = 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
         if (!havePointerLock) {
             return;
         }
-        document.addEventListener('pointerlockchange', function (event) { return _this.onChange(event); }, false);
-        document.addEventListener('mozpointerlockchange', function (event) { return _this.onChange(event); }, false);
-        document.addEventListener('webkitpointerlockchange', function (event) { return _this.onChange(event); }, false);
-        document.addEventListener('pointerlockerror', function (event) { return _this.onError(event); }, false);
-        document.addEventListener('mozpointerlockerror', function (event) { return _this.onError(event); }, false);
-        document.addEventListener('webkitpointerlockerror', function (event) { return _this.onError(event); }, false);
-        this.blocker.addEventListener("click", function (event) { return _this.onClick(event); }, false);
-    };
-    PointerLock.prototype.onChange = function (event) {
-        var element = document.body;
-        var doc = document;
-        if (doc.pointerLockElement === element || doc.mozPointerLockElement === element || doc.webkitPointerLockElement === element) {
-            //gained
-            this.hasLock = true;
-            this.blocker.style.display = "none";
-            if (this.game.state == GameState.INITIALIZED || this.game.state == GameState.PAUSED) {
-                this.game.start();
-            }
-            console.log("gained");
-        }
-        else {
-            //lost
-            this.hasLock = false;
-            this.blocker.style.display = '-webkit-box';
-            this.blocker.style.display = '-moz-box';
-            this.blocker.style.display = 'box';
-            this.instructions.style.display = "";
-            if (this.game.state == GameState.STARTED) {
-                this.game.pause();
-            }
-            console.log("lost");
-        }
-    };
-    PointerLock.prototype.onError = function (event) {
-        this.instructions.style.display = "";
-    };
-    PointerLock.prototype.onClick = function (event) {
-        var element = document.body;
-        element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
-        this.instructions.style.display = "none";
-        element.requestPointerLock();
+        document.addEventListener('pointerlockchange', this.onChange, false);
+        document.addEventListener('mozpointerlockchange', this.onChange, false);
+        document.addEventListener('webkitpointerlockchange', this.onChange, false);
+        document.addEventListener('pointerlockerror', this.onError, false);
+        document.addEventListener('mozpointerlockerror', this.onError, false);
+        document.addEventListener('webkitpointerlockerror', this.onError, false);
+        this.blocker.addEventListener("click", this.onClick, false);
     };
     return PointerLock;
 }());
@@ -128,7 +128,7 @@ var Keyboard = (function () {
             String.fromCharCode(keyCode);
     };
     /*
-    Credit to: https://github.com/stemkoski
+     Credit to: https://github.com/stemkoski
      */
     Keyboard.k = {
         8: "backspace", 9: "tab", 13: "enter", 16: "shift",
@@ -141,12 +141,9 @@ var Keyboard = (function () {
     };
     return Keyboard;
 }());
-var MouseButton;
-(function (MouseButton) {
-    MouseButton[MouseButton["LEFT"] = 0] = "LEFT";
-    MouseButton[MouseButton["RIGHT"] = 1] = "RIGHT";
-    MouseButton[MouseButton["MIDDLE"] = 2] = "MIDDLE";
-})(MouseButton || (MouseButton = {}));
+/**
+ *
+ */
 var Mouse = (function () {
     function Mouse(player) {
         var _this = this;
@@ -184,6 +181,9 @@ var Mouse = (function () {
     };
     return Mouse;
 }());
+/**
+ *
+ */
 var Morph = (function (_super) {
     __extends(Morph, _super);
     function Morph(level, material, mass) {
@@ -223,6 +223,25 @@ var Morph = (function (_super) {
     Morph.levels = [4, 6, 12, 20];
     return Morph;
 }(Physijs.SphereMesh));
+/**
+ *
+ */
+var Projectile = (function (_super) {
+    __extends(Projectile, _super);
+    function Projectile(pos, dir, level) {
+        _super.call(this, level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+            color: 0x303030
+        })), 0);
+        this.pos = pos;
+        this.dir = dir;
+        this.position.copy(pos);
+        this.setLinearVelocity(this.dir);
+    }
+    return Projectile;
+}(Morph));
+/**
+ *
+ */
 var Enemy = (function (_super) {
     __extends(Enemy, _super);
     function Enemy() {
@@ -243,6 +262,7 @@ var Player = (function (_super) {
         this.camera = new Vector3(0, 10, 10);
         this.heading = 0;
         this.speed = 25;
+        this.projectiles = [];
     }
     Player.prototype.jump = function () {
         this.applyCentralImpulse(new Vector3(0, 8, 0));
@@ -251,6 +271,9 @@ var Player = (function (_super) {
         this.heading -= xMovement * 0.002;
     };
     Player.prototype.click = function (button) {
+        if (button == THREE.MOUSE.LEFT) {
+            this.projectiles.push(new Projectile(this.position, this.getDirection(), this.level));
+        }
     };
     Player.prototype.getDirection = function () {
         return this.forward.clone().applyAxisAngle(this.upward, this.heading);
@@ -260,16 +283,18 @@ var Player = (function (_super) {
     };
     return Player;
 }(Morph));
-var World = (function () {
-    function World(player, scene, camera) {
+var World = (function (_super) {
+    __extends(World, _super);
+    function World(player, camera) {
+        _super.call(this);
         player.position.set(0, 2, 0);
         player.castShadow = true;
-        scene.add(player);
-        //scene.add(camera);
+        this.add(player);
+        //this.add(camera);
         var enemy = new Enemy();
         enemy.position.set(0, 5, 0);
         enemy.castShadow = true;
-        scene.add(enemy);
+        this.add(enemy);
         var light = new THREE.DirectionalLight(0xFFFFFF);
         light.position.set(20, 40, -15);
         light.target.position.copy(player.position);
@@ -282,15 +307,15 @@ var World = (function () {
         light.shadow.camera.far = 200;
         light.shadow.bias = -.0001;
         light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
-        scene.add(light);
+        this.add(light);
         var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
         var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xdadada }), 1, 1);
         var ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
-        scene.add(ground);
         ground.receiveShadow = true;
+        this.add(ground);
     }
     return World;
-}());
+}(Physijs.Scene));
 var GameState;
 (function (GameState) {
     GameState[GameState["INITIALIZED"] = 0] = "INITIALIZED";
@@ -319,12 +344,10 @@ var Game = (function () {
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
     }
     Game.prototype.init = function () {
-        //init scene
-        this.scene = new Physijs.Scene;
-        this.scene.setGravity(new THREE.Vector3(0, -40, 0));
         //init player and world
         this.player = new Player();
-        this.world = new World(this.player, this.scene, this.camera);
+        this.world = new World(this.player, this.camera);
+        this.world.setGravity(new THREE.Vector3(0, -40, 0));
         this.player.setDamping(0.05, 0.05);
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
@@ -344,7 +367,7 @@ var Game = (function () {
      */
     Game.prototype.render = function () {
         //console.log("render");
-        this.renderer.render(this.scene, this.camera);
+        this.renderer.render(this.world, this.camera);
     };
     /**
      * Update logic based on @param delta.
@@ -353,8 +376,10 @@ var Game = (function () {
     Game.prototype.tick = function (delta) {
         this.ticks++;
         this.keyboard.update();
+        //camera
         this.camera.position.addVectors(this.player.position, this.player.getCamera());
         this.camera.lookAt(this.player.position);
+        //player movement
         var forward = this.player.getDirection();
         forward.setLength(this.player.speed);
         var right = forward.clone().cross(this.player.upward);
@@ -371,20 +396,25 @@ var Game = (function () {
         if (this.keyboard.pressed("A")) {
             this.player.applyCentralForce(right.negate());
         }
+        //clamp speed, TODO into  a method
+        var velocity = this.player.getLinearVelocity().clampLength(-20, 20);
+        this.player.setLinearVelocity(velocity);
+        //morph!
         if (this.keyboard.down("Q")) {
             this.player.shrink();
         }
         else if (this.keyboard.down("E")) {
             this.player.grow();
         }
-        //console.log(this.player.getLinearVelocity().length());
-        var velocity = this.player.getLinearVelocity().clampLength(-20, 20);
-        this.player.setLinearVelocity(velocity);
+        //jump!
         if (this.keyboard.down("space")) {
             console.log("jump");
             this.player.jump();
         }
-        this.scene.simulate(delta, 1);
+        while (this.player.projectiles.length > 0) {
+            this.world.add(this.player.projectiles.pop());
+        }
+        this.world.simulate(delta, 1);
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
