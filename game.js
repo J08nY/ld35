@@ -597,6 +597,12 @@ var Game = (function () {
     Game.prototype.init = function () {
         //init player
         this.player = new Player(new Vector3(0, 2, 0));
+        //init audio
+        this.audio = new THREE.Audio(this.player.listener);
+        this.audio.load("background.ogg");
+        this.audio.autoplay = true;
+        this.audio.setLoop(true);
+        this.audio.setVolume(0.5);
         //init keyboard and mouse
         this.keyboard = new Keyboard();
         this.mouse = new Mouse(this.player);
@@ -614,6 +620,7 @@ var Game = (function () {
     Game.prototype.updateOverlay = function () {
         this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
         this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0);
+        this.overlay.querySelector("#level").innerHTML = "Level: " + this.level.level + "/" + Level.numLevels;
         this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
         this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
         this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
