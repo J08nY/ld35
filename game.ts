@@ -422,6 +422,8 @@ class World extends Physijs.Scene {
             mob.approach(this.player);
         });
         //tick projectiles and remove them if time out
+        //todo fix projectile removal, now ammojs spams obj s undefined
+        /*
         this.projectiles.filter((projectile) => {
             projectile.tick(delta);
             let keep = projectile.time < 10 * 1000;
@@ -430,6 +432,7 @@ class World extends Physijs.Scene {
             }
             return keep;
         });
+        */
 
         //physijs
         this.simulate(delta, 1);

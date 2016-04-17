@@ -355,14 +355,17 @@ var World = (function (_super) {
             mob.approach(_this.player);
         });
         //tick projectiles and remove them if time out
-        this.projectiles.filter(function (projectile) {
+        //todo fix projectile removal, now ammojs spams obj s undefined
+        /*
+        this.projectiles.filter((projectile) => {
             projectile.tick(delta);
-            var keep = projectile.time < 10 * 1000;
+            let keep = projectile.time < 10 * 1000;
             if (!keep) {
-                _this.remove(projectile);
+                this.remove(projectile);
             }
             return keep;
         });
+        */
         //physijs
         this.simulate(delta, 1);
     };
