@@ -425,7 +425,7 @@ class Player extends LiveMorph {
     speeds:number[] = [25, 24, 22, 20];
 
     constructor(pos:Vector3) {
-        super(pos, 1, Physijs.createMaterial(
+        super(pos, 0, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
                 color: 0x00a0b0
             }),
@@ -500,8 +500,8 @@ class Level extends Physijs.Scene {
 
         this.add(player);
 
-        for (let i = 0; i < 15; i++) {
-            this.spawn();
+        for (let i = 0; i < 10; i++) {
+            this.spawn(20, 20);
         }
 
         let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
@@ -509,11 +509,11 @@ class Level extends Physijs.Scene {
         this.add(this.ground);
     }
 
-    spawn() {
+    spawn(start:number, range:number) {
         let a = Math.random() > 0.5 ? -1 : 1;
         let b = Math.random() > 0.5 ? -1 : 1;
-        let x = Math.floor(Math.random() * 20 + 10);
-        let z = Math.floor(Math.random() * 20 + 10);
+        let x = Math.floor(Math.random() * range + start);
+        let z = Math.floor(Math.random() * range + start);
         let size = Math.floor(Math.random() * 4);
 
         this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
@@ -571,7 +571,7 @@ class Level extends Physijs.Scene {
         this.mobs = this.mobs.filter((mob) => {
             let alive = mob.isAlive();
             if (!alive) {
-                this.player.score+=mob.level;
+                this.player.score+=mob.level+1;
                 let polys = mob.die();
                 polys.forEach((poly) => {
                     this.add(poly);
@@ -597,8 +597,8 @@ class Level extends Physijs.Scene {
         });
 
         //spawn new mob?
-        if (Math.random() < 0.03) {
-            this.spawn();
+        if (Math.random() < 0.035) {
+            this.spawn(20, 10);
         }
 
         //physijs
@@ -727,7 +727,7 @@ class Game {
 
     updateOverlay():void {
         this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
-        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft();
+        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0);
         this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
         this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
         this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
@@ -788,12 +788,12 @@ class Game {
 
         //morph!
         if (this.keyboard.down("Q")) {
-            if (this.player.minus > 0) {
+            if (this.player.minus > 0 && this.player.level > 0) {
                 this.player.shrink();
                 this.player.minus--;
             }
         } else if (this.keyboard.down("E")) {
-            if (this.player.plus > 0) {
+            if (this.player.plus > 0 && this.player.level < 3) {
                 this.player.grow();
                 this.player.plus--;
             }

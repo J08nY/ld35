@@ -352,7 +352,7 @@ var Mob = (function (_super) {
 var Player = (function (_super) {
     __extends(Player, _super);
     function Player(pos) {
-        _super.call(this, pos, 1, Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        _super.call(this, pos, 0, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
         }), 1, 0.1), 0.5);
         this.minus = 5;
@@ -412,18 +412,18 @@ var Level = (function (_super) {
         this.time = 0;
         this.setGravity(new THREE.Vector3(0, -40, 0));
         this.add(player);
-        for (var i = 0; i < 15; i++) {
-            this.spawn();
+        for (var i = 0; i < 10; i++) {
+            this.spawn(20, 20);
         }
         var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
         this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         this.add(this.ground);
     }
-    Level.prototype.spawn = function () {
+    Level.prototype.spawn = function (start, range) {
         var a = Math.random() > 0.5 ? -1 : 1;
         var b = Math.random() > 0.5 ? -1 : 1;
-        var x = Math.floor(Math.random() * 20 + 10);
-        var z = Math.floor(Math.random() * 20 + 10);
+        var x = Math.floor(Math.random() * range + start);
+        var z = Math.floor(Math.random() * range + start);
         var size = Math.floor(Math.random() * 4);
         this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
     };
@@ -477,7 +477,7 @@ var Level = (function (_super) {
         this.mobs = this.mobs.filter(function (mob) {
             var alive = mob.isAlive();
             if (!alive) {
-                _this.player.score += mob.level;
+                _this.player.score += mob.level + 1;
                 var polys = mob.die();
                 polys.forEach(function (poly) {
                     _this.add(poly);
@@ -502,8 +502,8 @@ var Level = (function (_super) {
             return true;
         });
         //spawn new mob?
-        if (Math.random() < 0.03) {
-            this.spawn();
+        if (Math.random() < 0.035) {
+            this.spawn(20, 10);
         }
         //physijs
         this.simulate(delta, 1);
@@ -613,7 +613,7 @@ var Game = (function () {
     };
     Game.prototype.updateOverlay = function () {
         this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
-        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft();
+        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0);
         this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
         this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
         this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
@@ -660,13 +660,13 @@ var Game = (function () {
         this.player.setLinearVelocity(velocity);
         //morph!
         if (this.keyboard.down("Q")) {
-            if (this.player.minus > 0) {
+            if (this.player.minus > 0 && this.player.level > 0) {
                 this.player.shrink();
                 this.player.minus--;
             }
         }
         else if (this.keyboard.down("E")) {
-            if (this.player.plus > 0) {
+            if (this.player.plus > 0 && this.player.level < 3) {
                 this.player.grow();
                 this.player.plus--;
             }
