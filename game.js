@@ -127,6 +127,9 @@ var Keyboard = (function () {
             Keyboard.k[keyCode] :
             String.fromCharCode(keyCode);
     };
+    /*
+    Credit to: https://github.com/stemkoski
+     */
     Keyboard.k = {
         8: "backspace", 9: "tab", 13: "enter", 16: "shift",
         17: "ctrl", 18: "alt", 27: "esc", 32: "space",
@@ -145,8 +148,9 @@ var MouseButton;
     MouseButton[MouseButton["MIDDLE"] = 2] = "MIDDLE";
 })(MouseButton || (MouseButton = {}));
 var Mouse = (function () {
-    function Mouse() {
+    function Mouse(player) {
         var _this = this;
+        this.player = player;
         this.xMovement = 0;
         this.yMovement = 0;
         this.buttons = {};
@@ -155,10 +159,11 @@ var Mouse = (function () {
             _this.xMovement = event.movementX;
             _this.y = event.screenY;
             _this.yMovement = event.movementY;
-            //        console.log(this.x + " " + this.y + " :: " + this.xMovement + " " + this.yMovement);
+            _this.player.rotate(event.movementX);
         };
         this.onMouseDown = function (event) {
             _this.buttons[event.button] = true;
+            _this.player.click(event.button);
         };
         this.onMouseUp = function (event) {
             _this.buttons[event.button] = false;
@@ -204,7 +209,7 @@ var Morph = (function (_super) {
         this.geometry = Morph.generateGeometry(this.level);
     };
     Morph.prototype.shrink = function () {
-        if (this.level > 1) {
+        if (this.level > 0) {
             this.level--;
             this.updateGeometry();
         }
@@ -232,14 +237,26 @@ var Player = (function (_super) {
     function Player() {
         _super.call(this, 1, Physijs.createMaterial(new THREE.MeshBasicMaterial({
             color: 0x00a0b0
-        }), .8, .6), 0.5);
-        this.direction = new Vector3(0, 0, -1);
+        }), 1, 0.1), 0.5);
+        this.forward = new Vector3(0, 0, -1);
         this.upward = new Vector3(0, 1, 0);
         this.camera = new Vector3(0, 10, 10);
-        this.speed = 15;
+        this.heading = 0;
+        this.speed = 25;
     }
     Player.prototype.jump = function () {
         this.applyCentralImpulse(new Vector3(0, 8, 0));
+    };
+    Player.prototype.rotate = function (xMovement) {
+        this.heading -= xMovement * 0.002;
+    };
+    Player.prototype.click = function (button) {
+    };
+    Player.prototype.getDirection = function () {
+        return this.forward.clone().applyAxisAngle(this.upward, this.heading);
+    };
+    Player.prototype.getCamera = function () {
+        return this.camera.clone().applyAxisAngle(this.upward, this.heading);
     };
     return Player;
 }(Morph));
@@ -267,7 +284,7 @@ var World = (function () {
         light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
         scene.add(light);
         var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
-        var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xdadada }), 1, .6);
+        var groundMaterial = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xdadada }), 1, 1);
         var ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
         scene.add(ground);
         ground.receiveShadow = true;
@@ -287,8 +304,8 @@ var Game = (function () {
         this.ticks = 0;
         this.delta = 0;
         this.lastFrame = 0;
-        this.timestep = 1000 / 30;
-        this.maxFPS = 30;
+        this.timestep = 1000 / 60;
+        this.maxFPS = 60;
         this.renderer = new THREE.WebGLRenderer({
             antialias: true
         });
@@ -300,20 +317,21 @@ var Game = (function () {
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", function () { return _this.onWindowResize(); }, false);
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
-        this.keyboard = new Keyboard();
-        this.mouse = new Mouse();
     }
     Game.prototype.init = function () {
-        //init world
+        //init scene
         this.scene = new Physijs.Scene;
-        this.scene.setGravity(new THREE.Vector3(0, -10, 0));
+        this.scene.setGravity(new THREE.Vector3(0, -40, 0));
+        //init player and world
         this.player = new Player();
         this.world = new World(this.player, this.scene, this.camera);
+        this.player.setDamping(0.05, 0.05);
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
-        this.playerDirection = new THREE.ArrowHelper(this.player.direction.clone().normalize(), this.player.position, 5);
-        this.scene.add(this.playerDirection);
+        //init keyboard and mouse
+        this.keyboard = new Keyboard();
+        this.mouse = new Mouse(this.player);
         this.state = GameState.INITIALIZED;
     };
     Game.prototype.onWindowResize = function () {
@@ -333,19 +351,13 @@ var Game = (function () {
      * @param delta
      */
     Game.prototype.tick = function (delta) {
-        //console.log("tick " + delta);
         this.ticks++;
         this.keyboard.update();
-        this.camera.position.addVectors(this.player.position, this.player.camera);
-        if (this.mouse.xMovement != 0) {
-            this.camera.lookAt(this.player.position);
-            this.player.direction.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
-            this.player.camera.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
-            this.playerDirection.setDirection(this.player.direction);
-        }
-        var forward = this.player.direction.clone();
+        this.camera.position.addVectors(this.player.position, this.player.getCamera());
+        this.camera.lookAt(this.player.position);
+        var forward = this.player.getDirection();
         forward.setLength(this.player.speed);
-        var right = this.player.direction.clone().cross(this.player.upward);
+        var right = forward.clone().cross(this.player.upward);
         right.setLength(this.player.speed);
         if (this.keyboard.pressed("W")) {
             this.player.applyCentralForce(forward);
@@ -359,12 +371,20 @@ var Game = (function () {
         if (this.keyboard.pressed("A")) {
             this.player.applyCentralForce(right.negate());
         }
+        if (this.keyboard.down("Q")) {
+            this.player.shrink();
+        }
+        else if (this.keyboard.down("E")) {
+            this.player.grow();
+        }
+        //console.log(this.player.getLinearVelocity().length());
+        var velocity = this.player.getLinearVelocity().clampLength(-20, 20);
+        this.player.setLinearVelocity(velocity);
         if (this.keyboard.down("space")) {
             console.log("jump");
             this.player.jump();
         }
-        //        console.log(this.camera.position.addVectors(this.player.position, this.player.camera));
-        this.scene.simulate(undefined, 2);
+        this.scene.simulate(delta, 1);
     };
     Game.prototype.run = function (timestamp) {
         var _this = this;
@@ -411,7 +431,8 @@ var Game = (function () {
     Game.prototype.stop = function () {
         this.pause();
         this.state = GameState.STOPPED;
-        //end here!!
+        this.mouse.unregister();
+        this.keyboard.unregister();
         //todo
     };
     return Game;

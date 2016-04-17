@@ -75,6 +75,9 @@ class PointerLock {
 }
 
 class Keyboard {
+    /*
+    Credit to: https://github.com/stemkoski
+     */
     static k = {
         8: "backspace", 9: "tab", 13: "enter", 16: "shift",
         17: "ctrl", 18: "alt", 27: "esc", 32: "space",
@@ -168,8 +171,7 @@ class Mouse {
     yMovement:number = 0;
     private buttons = {};
 
-    constructor() {
-
+    constructor(private player:Player) {
     }
 
     onMouseMove = (event:MouseEvent) => {
@@ -177,11 +179,12 @@ class Mouse {
         this.xMovement = event.movementX;
         this.y = event.screenY;
         this.yMovement = event.movementY;
-//        console.log(this.x + " " + this.y + " :: " + this.xMovement + " " + this.yMovement);
+        this.player.rotate(event.movementX);
     };
 
     onMouseDown = (event:MouseEvent) => {
         this.buttons[event.button] = true;
+        this.player.click(event.button);
     };
 
     onMouseUp = (event:MouseEvent) => {
@@ -210,7 +213,6 @@ class Mouse {
 class Morph extends Physijs.SphereMesh {
     static levels:number[] = [4, 6, 12, 20];
 
-
     constructor(public level:number, material?:THREE.Material, mass?:number) {
         super(Morph.generateGeometry(level), material, mass);
     }
@@ -237,7 +239,7 @@ class Morph extends Physijs.SphereMesh {
     }
 
     shrink():void {
-        if (this.level > 1) {
+        if (this.level > 0) {
             this.level--;
             this.updateGeometry();
         }
@@ -254,6 +256,7 @@ class Morph extends Physijs.SphereMesh {
 
 class Enemy extends Morph {
 
+
     constructor() {
         super(0, Physijs.createMaterial(
             new THREE.MeshBasicMaterial({
@@ -263,28 +266,18 @@ class Enemy extends Morph {
             .6
         ), 2);
     }
-
-    /*
-     static getMaterial():Physijs.Material {
-     return Physijs.createMaterial(
-     new THREE.MeshBasicMaterial({
-     color: 0xb02000
-     }),
-     .8,
-     .3
-     );
-     }
-     */
 }
 
 class Player extends Morph {
     minus:number;
     plus:number;
     life:number;
-    direction:Vector3 = new Vector3(0, 0, -1);
+    forward:Vector3 = new Vector3(0, 0, -1);
     upward:Vector3 = new Vector3(0, 1, 0);
     camera:Vector3 = new Vector3(0, 10, 10);
-    speed:number = 15;
+    heading:number = 0;
+    speed:number = 25;
+
 
     constructor() {
 
@@ -292,26 +285,31 @@ class Player extends Morph {
             new THREE.MeshBasicMaterial({
                 color: 0x00a0b0
             }),
-            .8,
-            .6
-        ), 0.5);
+            1,
+            0.1
+            ),
+            0.5);
     }
 
-    jump() {
+    jump():void {
         this.applyCentralImpulse(new Vector3(0, 8, 0));
     }
 
-    /*
-     static getMaterial():Physijs.Material {
-     return Physijs.createMaterial(
-     new THREE.MeshBasicMaterial({
-     color: 0x00a0b0
-     }),
-     .8,
-     .3
-     );
-     }
-     */
+    rotate(xMovement:number):void {
+        this.heading -= xMovement * 0.002;
+    }
+
+    click(button:number):void {
+
+    }
+
+    getDirection():Vector3 {
+        return this.forward.clone().applyAxisAngle(this.upward, this.heading);
+    }
+
+    getCamera():Vector3 {
+        return this.camera.clone().applyAxisAngle(this.upward, this.heading);
+    }
 }
 
 class World {
@@ -345,12 +343,11 @@ class World {
         light.shadow.mapSize.width = light.shadow.mapSize.height = 2048;
         scene.add(light);
 
-
         let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
         let groundMaterial = Physijs.createMaterial(
             new THREE.MeshBasicMaterial({color: 0xdadada}),
             1,
-            .6
+            1
         );
 
         let ground = new Physijs.BoxMesh(groundGeometry, groundMaterial, 0);
@@ -374,7 +371,6 @@ class Game {
     camera:THREE.PerspectiveCamera;
     scene:Physijs.Scene;
     player:Player;
-    playerDirection: THREE.ArrowHelper;
 
     world:World;
     state:GameState;
@@ -385,8 +381,8 @@ class Game {
     private ticks:number = 0;
     private delta:number = 0;
     private lastFrame:number = 0;
-    private timestep:number = 1000 / 30;
-    private maxFPS:number = 30;
+    private timestep:number = 1000 / 60;
+    private maxFPS:number = 60;
 
     private keepRunning:boolean;
 
@@ -404,33 +400,32 @@ class Game {
         window.addEventListener("resize", () => this.onWindowResize(), false);
 
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
-
-        this.keyboard = new Keyboard();
-
-        this.mouse = new Mouse();
     }
 
     init():void {
-        //init world
+        //init scene
         this.scene = new Physijs.Scene;
-        this.scene.setGravity(new THREE.Vector3(0, -10, 0));
+        this.scene.setGravity(new THREE.Vector3(0, -40, 0));
 
+        //init player and world
         this.player = new Player();
+
         this.world = new World(this.player, this.scene, this.camera);
+        this.player.setDamping(0.05, 0.05);
 
         //init camera
         this.camera.position.addVectors(this.player.position, this.player.camera);
         this.camera.lookAt(this.player.position);
 
-
-        this.playerDirection = new THREE.ArrowHelper(this.player.direction.clone().normalize(), this.player.position, 5);
-        this.scene.add(this.playerDirection);
+        //init keyboard and mouse
+        this.keyboard = new Keyboard();
+        this.mouse = new Mouse(this.player);
 
         this.state = GameState.INITIALIZED;
     }
 
 
-    onWindowResize() {
+    onWindowResize():void {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
 
@@ -449,64 +444,16 @@ class Game {
      * Update logic based on @param delta.
      * @param delta
      */
-    tick(delta):void {
-        //console.log("tick " + delta);
+    tick(delta:number):void {
         this.ticks++;
         this.keyboard.update();
 
-        this.camera.position.addVectors(this.player.position, this.player.camera);
+        this.camera.position.addVectors(this.player.position, this.player.getCamera());
+        this.camera.lookAt(this.player.position);
 
-
-        if (this.mouse.xMovement != 0) {
-            this.camera.lookAt(this.player.position);
-            this.player.direction.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
-            this.player.camera.applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180);
-            this.playerDirection.setDirection(this.player.direction);
-
-            /* //Please nobody look at this. I am dumb...
-
-             //this.player.camera -> relative position of camera to player
-             //to get rotation, just negate and normalize
-             let dir = this.player.camera.clone().negate().normalize();
-             let newCamera = this.player.camera.clone().applyAxisAngle(new Vector3(0, 1, 0), -this.mouse.xMovement / 180);
-             let up = this.camera.up.clone().add(this.player.camera).applyAxisAngle(this.player.upward, -this.mouse.xMovement / 180).sub(newCamera);
-             let quatr = new THREE.Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), dir);
-             //this.camera.rotateY(this.mouse.xMovement / 180);
-             //this.camera.up.copy(new Vector3(0,1,0));
-             //this.camera.rotation.setFromQuaternion(quatr);
-
-             this.player.direction.applyAxisAngle(new Vector3(0, 1, 0), this.mouse.xMovement / 180);
-             this.player.camera.copy(newCamera);
-             this.camera.lookAt(this.player.position);
-             console.log("A  " + this.camera.up.toArray().toString() + " || " + this.camera.rotation.toArray().toString());
-             //this.camera.up.copy(new Vector3(0,1,0));
-
-             console.log("B  " + this.camera.up.toArray().toString() + " || " + this.camera.rotation.toArray().toString());
-
-             //this.camera.up.copy(up);
-             //this.camera.rotation.setFromQuaternion(quatr);
-
-             let look = this.player.camera.clone().negate().normalize();
-             let right = this.player.direction.clone().cross(this.player.upward).normalize();
-             let angle = this.player.camera.angleTo(this.player.direction);
-             let camUp = this.player.upward.clone().applyAxisAngle(right, -angle);
-
-             this.camera.rotation.copy(
-             new THREE.Euler().setFromVector3(look));
-             this.camera.up.copy(camUp);
-            //rotate tis.player.upward around
-             this.camera.lookAt(this.player.position);
-             console.log(this.camera.rotation);
-             console.log(this.camera.quaternion);
-            //this.camera.rotationAutoUpdate = true;
-             this.camera.quaternion.setFromUnitVectors(new Vector3(0,0,-1), look);
-             this.camera.up.copy(this.player.upward);
-             */
-        }
-
-        let forward = this.player.direction.clone();
+        let forward = this.player.getDirection();
         forward.setLength(this.player.speed);
-        let right = this.player.direction.clone().cross(this.player.upward);
+        let right = forward.clone().cross(this.player.upward);
         right.setLength(this.player.speed);
 
         if (this.keyboard.pressed("W")) {
@@ -522,14 +469,25 @@ class Game {
             this.player.applyCentralForce(right.negate());
         }
 
+        if (this.keyboard.down("Q")) {
+            this.player.shrink();
+        } else if (this.keyboard.down("E")) {
+            this.player.grow();
+        }
+
+        //console.log(this.player.getLinearVelocity().length());
+
+        let velocity = this.player.getLinearVelocity().clampLength(-20, 20);
+        this.player.setLinearVelocity(velocity);
+
+
         if (this.keyboard.down("space")) {
             console.log("jump");
             this.player.jump();
         }
 
 
-//        console.log(this.camera.position.addVectors(this.player.position, this.player.camera));
-        this.scene.simulate(undefined, 2);
+        this.scene.simulate(delta, 1);
     }
 
     run(timestamp?):void {
@@ -584,7 +542,9 @@ class Game {
     stop() {
         this.pause();
         this.state = GameState.STOPPED;
-        //end here!!
+
+        this.mouse.unregister();
+        this.keyboard.unregister();
         //todo
     }
 }
