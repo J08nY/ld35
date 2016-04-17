@@ -1,6 +1,7 @@
 /// <reference path="three_js/ts/three.d.ts"/>
 /// <reference path="physi_js/physijs.d.ts"/>
 /// <reference path="three_js/ts/detector.d.ts"/>
+/// <reference path="three_js/ts/three-canvasrenderer.d.ts"/>
 'use strict';
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -8,11 +9,11 @@ var __extends = (this && this.__extends) || function (d, b) {
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var Vector3 = THREE.Vector3;
+var Face3 = THREE.Face3;
 var Material = THREE.Material;
 var Geometry = THREE.Geometry;
-var smoothstep = THREE.Math.smoothstep;
-var TetrahedronGeometry = THREE.TetrahedronGeometry;
-var Face3 = THREE.Face3;
+var CanvasRenderer = THREE.CanvasRenderer;
+var WebGLRenderer = THREE.WebGLRenderer;
 //wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
 Physijs.scripts.ammo = "ammo.js";
@@ -187,12 +188,10 @@ var Poly = (function (_super) {
     __extends(Poly, _super);
     function Poly(pos, polarity) {
         var _this = this;
-        _super.call(this, Poly.generateGeometry(), Physijs.createMaterial(new THREE.MeshBasicMaterial({
-            color: polarity > 0 ? 0x0010a0 : 0xa01000
-        }), 1, 1), 0.3);
-        this.pos = pos;
+        _super.call(this, Poly.generateGeometry(), polarity > 0 ? Poly.blue : Poly.red, 0.3);
         this.polarity = polarity;
         this.addEventListener("ready", function () { return _this.init(); });
+        this.position.copy(pos);
     }
     Poly.prototype.init = function () {
         //launch the poly into space
@@ -218,6 +217,15 @@ var Poly = (function (_super) {
     Poly.prototype.collides = function (other) {
         return this.position.clone().sub(other.position).lengthSq() <= ((other.radius) ^ 2);
     };
+    Poly.prototype.dispose = function () {
+        this.geometry.dispose();
+    };
+    Poly.red = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        color: 0xa01000
+    }), 1, 1);
+    Poly.blue = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        color: 0x0010a0
+    }), 1, 1);
     return Poly;
 }(Physijs.PlaneMesh));
 var Morph = (function (_super) {
@@ -249,6 +257,7 @@ var Morph = (function (_super) {
         }
     };
     Morph.prototype.updateGeometry = function () {
+        this.geometry.dispose();
         this.geometry = Morph.generateGeometry(this.level);
         this.geometry.computeBoundingSphere();
         this.radius = this.geometry.boundingSphere.radius;
@@ -268,15 +277,16 @@ var Morph = (function (_super) {
     Morph.prototype.collides = function (other) {
         return this.position.clone().sub(other.position).length() <= (this.radius + other.radius);
     };
+    Morph.prototype.dispose = function () {
+        this.geometry.dispose();
+    };
     Morph.levels = [4, 6, 12, 20];
     return Morph;
 }(Physijs.SphereMesh));
 var Projectile = (function (_super) {
     __extends(Projectile, _super);
     function Projectile(pos, dir, level) {
-        _super.call(this, pos.clone().add(dir.clone().setLength(2)), level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
-            color: 0x303030
-        }), 0.5, 0.3), 0.01);
+        _super.call(this, pos.clone().add(dir.clone().setLength(2)), level, Projectile.mat, 0.05);
         this.pos = pos;
         this.dir = dir;
         this.time = 0;
@@ -291,6 +301,9 @@ var Projectile = (function (_super) {
     Projectile.prototype.tick = function (delta) {
         this.time += delta;
     };
+    Projectile.mat = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        color: 0x303030
+    }), 0.5, 0.3);
     return Projectile;
 }(Morph));
 var LiveMorph = (function (_super) {
@@ -314,9 +327,7 @@ var LiveMorph = (function (_super) {
 var Mob = (function (_super) {
     __extends(Mob, _super);
     function Mob(pos, level) {
-        _super.call(this, pos, level, Physijs.createMaterial(new THREE.MeshBasicMaterial({
-            color: 0xa01b00
-        }), .8, .6), 2);
+        _super.call(this, pos, level, Mob.mat, 2);
         this.speeds = [25.5, 20, 17, 14];
     }
     Mob.prototype.approach = function (player) {
@@ -328,11 +339,13 @@ var Mob = (function (_super) {
         var amount = Math.floor(Math.random() * 10) + 3;
         for (var i = 0; i < amount; i++) {
             var poly = new Poly(this.position, Math.random() > 0.5 ? 1 : -1);
-            poly.position.copy(this.position);
             polys.push(poly);
         }
         return polys;
     };
+    Mob.mat = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+        color: 0xa01b00
+    }), .8, .6);
     return Mob;
 }(LiveMorph));
 var Player = (function (_super) {
@@ -394,38 +407,24 @@ var Level = (function (_super) {
         this.mobs = [];
         this.projectiles = [];
         this.polygons = [];
-        //private bounds:Geometry[] = [];
         this.time = 0;
         this.setGravity(new THREE.Vector3(0, -40, 0));
         this.add(player);
         for (var i = 0; i < 15; i++) {
-            var a = Math.random() > 0.5 ? -1 : 1;
-            var b = Math.random() > 0.5 ? -1 : 1;
-            var x = Math.floor(Math.random() * 20 + 10);
-            var z = Math.floor(Math.random() * 20 + 10);
-            var size = Math.floor(Math.random() * 4);
-            this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
+            this.spawn();
         }
-        /*
-        let light:any = new THREE.DirectionalLight(0xFFFFFF);
-        light.position.set(20, 40, -15);
-        light.target.position.copy(player.position);
-        light.castShadow = true;
-        light.shadow.camera.left = -60;
-        light.shadow.camera.top = -60;
-        light.shadow.camera.right = 60;
-        light.shadow.camera.bottom = 60;
-        light.shadow.camera.near = 20;
-        light.shadow.camera.far = 200;
-        light.shadow.bias = -.0001;
-        light.shadow.mapSize.width = light.shadow.mapSize.height = 4096;
-        this.add(light);
-        */
         var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
-        var ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
-        ground.receiveShadow = true;
-        this.add(ground);
+        this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
+        this.add(this.ground);
     }
+    Level.prototype.spawn = function () {
+        var a = Math.random() > 0.5 ? -1 : 1;
+        var b = Math.random() > 0.5 ? -1 : 1;
+        var x = Math.floor(Math.random() * 20 + 10);
+        var z = Math.floor(Math.random() * 20 + 10);
+        var size = Math.floor(Math.random() * 4);
+        this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
+    };
     Level.prototype.spawnMob = function (where, size) {
         var mob = new Mob(where, size);
         this.add(mob);
@@ -462,7 +461,7 @@ var Level = (function (_super) {
                     if (mob.collides(projectile)) {
                         if (mob.level == projectile.level) {
                             collided = true;
-                            mob.damage((projectile.level + 1) * 10);
+                            mob.damage(34);
                             break;
                         }
                     }
@@ -499,11 +498,31 @@ var Level = (function (_super) {
             }
             return true;
         });
+        //spawn new mob?
+        if (Math.random() < 0.03) {
+            this.spawn();
+        }
         //physijs
         this.simulate(delta, 1);
     };
     Level.prototype.timeLeft = function () {
         return Level.durations[this.level] - (this.time / 1000);
+    };
+    Level.prototype.dispose = function () {
+        var _this = this;
+        this.ground.geometry.dispose();
+        this.mobs.forEach(function (obj) {
+            _this.remove(obj);
+            obj.dispose();
+        });
+        this.projectiles.forEach(function (obj) {
+            _this.remove(obj);
+            obj.dispose();
+        });
+        this.polygons.forEach(function (obj) {
+            _this.remove(obj);
+            obj.dispose();
+        });
     };
     //unused
     Level.generateGeometry = function (level) {
@@ -552,14 +571,20 @@ var Game = (function () {
             _this.camera.updateProjectionMatrix();
             _this.renderer.setSize(window.innerWidth, window.innerHeight);
         };
-        this.renderer = new THREE.WebGLRenderer({
-            antialias: true
-        });
-        this.renderer.setClearColor(0xffffff);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        if (Detector.webgl) {
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            var rendr = this.renderer;
+            rendr.setClearColor(0xffffff);
+            rendr.setPixelRatio(window.devicePixelRatio);
+            rendr.setSize(window.innerWidth, window.innerHeight);
+        }
+        else {
+            this.renderer = new THREE.CanvasRenderer();
+            var rendr = this.renderer;
+            rendr.setClearColor(0xffffff);
+            rendr.setPixelRatio(window.devicePixelRatio);
+            rendr.setSize(window.innerWidth, window.innerHeight);
+        }
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", this.onWindowResize, false);
         this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1000);
@@ -696,13 +721,13 @@ var Game = (function () {
         if (this.level.level != Level.numLevels - 1) {
             if (result) {
                 //next level, shit!
+                this.level.dispose();
                 this.newLevel(this.level.level + 1);
                 this.start();
                 return;
             }
         }
-        else {
-        }
+        this.level.dispose();
         window.removeEventListener("resize", this.onWindowResize, false);
         var blocker = document.getElementById("block");
         blocker.style.display = '-webkit-box';
@@ -712,12 +737,12 @@ var Game = (function () {
         instructions.style.fontSize = "40px";
         instructions.innerHTML = result ? "You won!" : "You lost!";
         instructions.style.display = "";
+        if (Detector.webgl) {
+            this.renderer.dispose();
+        }
     };
     return Game;
 }());
-if (!Detector.webgl) {
-    Detector.addGetWebGLMessage();
-}
 window.onload = function () {
     var game = new Game();
     game.init();

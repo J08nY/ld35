@@ -1,14 +1,15 @@
 /// <reference path="three_js/ts/three.d.ts"/>
 /// <reference path="physi_js/physijs.d.ts"/>
 /// <reference path="three_js/ts/detector.d.ts"/>
+/// <reference path="three_js/ts/three-canvasrenderer.d.ts"/>
 'use strict';
 
 import Vector3 = THREE.Vector3;
+import Face3 = THREE.Face3;
 import Material = THREE.Material;
 import Geometry = THREE.Geometry;
-import smoothstep = THREE.Math.smoothstep;
-import TetrahedronGeometry = THREE.TetrahedronGeometry;
-import Face3 = THREE.Face3;
+import CanvasRenderer = THREE.CanvasRenderer;
+import WebGLRenderer = THREE.WebGLRenderer;
 
 //wtf fix..
 Physijs.scripts.worker = "physi_js/physijs_worker.js";
@@ -209,16 +210,23 @@ class Mouse {
 
 class Poly extends Physijs.PlaneMesh {
 
-    constructor(private pos:Vector3, public polarity:number) {
-        super(Poly.generateGeometry(),
-            Physijs.createMaterial(new THREE.MeshBasicMaterial({
-                    color: polarity > 0 ? 0x0010a0 : 0xa01000
-                }),
-                1,
-                1
-            ),
-            0.3);
+    static red:Physijs.Material = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+            color: 0xa01000
+        }),
+        1,
+        1
+    );
+    static blue:Physijs.Material = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+            color: 0x0010a0
+        }),
+        1,
+        1
+    );
+
+    constructor(pos:Vector3, public polarity:number) {
+        super(Poly.generateGeometry(), polarity > 0 ? Poly.blue : Poly.red, 0.3);
         this.addEventListener("ready", () => this.init());
+        this.position.copy(pos);
     }
 
     init():void {
@@ -247,6 +255,10 @@ class Poly extends Physijs.PlaneMesh {
 
     collides(other:Morph):boolean {
         return this.position.clone().sub(other.position).lengthSq() <= ((other.radius) ^ 2);
+    }
+
+    dispose() {
+        this.geometry.dispose()
     }
 }
 
@@ -284,6 +296,7 @@ class Morph extends Physijs.SphereMesh {
     }
 
     private updateGeometry():void {
+        this.geometry.dispose();
         this.geometry = Morph.generateGeometry(this.level);
         this.geometry.computeBoundingSphere();
         this.radius = this.geometry.boundingSphere.radius;
@@ -307,22 +320,24 @@ class Morph extends Physijs.SphereMesh {
         return this.position.clone().sub(other.position).length() <= (this.radius + other.radius);
     }
 
-
+    dispose():void {
+        this.geometry.dispose();
+    }
 }
 
 
 class Projectile extends Morph {
     time:number = 0;
 
+    static mat:Physijs.Material = Physijs.createMaterial(new THREE.MeshBasicMaterial({
+            color: 0x303030
+        }),
+        0.5,
+        0.3
+    );
+
     constructor(private pos:Vector3, private dir:Vector3, level:number) {
-        super(pos.clone().add(dir.clone().setLength(2)), level,
-            Physijs.createMaterial(new THREE.MeshBasicMaterial({
-                    color: 0x303030
-                }),
-                0.5,
-                0.3
-            ),
-            0.01);
+        super(pos.clone().add(dir.clone().setLength(2)), level, Projectile.mat, 0.05);
     }
 
     init():void {
@@ -363,14 +378,15 @@ class Mob extends LiveMorph {
 
     speeds:number[] = [25.5, 20, 17, 14];
 
+    static mat:Physijs.Material = Physijs.createMaterial(
+        new THREE.MeshBasicMaterial({
+            color: 0xa01b00
+        }),
+        .8,
+        .6);
+
     constructor(pos:Vector3, level:number) {
-        super(pos, level, Physijs.createMaterial(
-            new THREE.MeshBasicMaterial({
-                color: 0xa01b00
-            }),
-            .8,
-            .6
-        ), 2);
+        super(pos, level, Mob.mat, 2);
     }
 
     approach(player:Player) {
@@ -383,7 +399,6 @@ class Mob extends LiveMorph {
         let amount = Math.floor(Math.random() * 10) + 3;
         for (let i = 0; i < amount; i++) {
             let poly = new Poly(this.position, Math.random() > 0.5 ? 1 : -1);
-            poly.position.copy(this.position);
             polys.push(poly);
         }
 
@@ -465,12 +480,11 @@ class Level extends Physijs.Scene {
     private mobs:Mob[] = [];
     private projectiles:Projectile[] = [];
     private polygons:Poly[] = [];
-    //private bounds:Geometry[] = [];
+    private ground:Physijs.BoxMesh;
     private time:number = 0;
 
     static durations:number[] = [20, 30, 45, 60, -1];
     static numLevels:number = Level.durations.length;
-
 
     static mat:Physijs.Material = Physijs.createMaterial(
         new THREE.MeshBasicMaterial({color: 0xcacaca}),
@@ -485,35 +499,22 @@ class Level extends Physijs.Scene {
         this.add(player);
 
         for (let i = 0; i < 15; i++) {
-            let a = Math.random() > 0.5 ? -1 : 1;
-            let b = Math.random() > 0.5 ? -1 : 1;
-            let x = Math.floor(Math.random() * 20 + 10);
-            let z = Math.floor(Math.random() * 20 + 10);
-            let size = Math.floor(Math.random() * 4);
-
-            this.spawnMob(this.player.position.clone().add(new Vector3(a*x, 0, b*z)), size);
+            this.spawn();
         }
 
-        /*
-        let light:any = new THREE.DirectionalLight(0xFFFFFF);
-        light.position.set(20, 40, -15);
-        light.target.position.copy(player.position);
-        light.castShadow = true;
-        light.shadow.camera.left = -60;
-        light.shadow.camera.top = -60;
-        light.shadow.camera.right = 60;
-        light.shadow.camera.bottom = 60;
-        light.shadow.camera.near = 20;
-        light.shadow.camera.far = 200;
-        light.shadow.bias = -.0001;
-        light.shadow.mapSize.width = light.shadow.mapSize.height = 4096;
-        this.add(light);
-        */
-
         let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
-        let ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
-        ground.receiveShadow = true;
-        this.add(ground);
+        this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
+        this.add(this.ground);
+    }
+
+    spawn() {
+        let a = Math.random() > 0.5 ? -1 : 1;
+        let b = Math.random() > 0.5 ? -1 : 1;
+        let x = Math.floor(Math.random() * 20 + 10);
+        let z = Math.floor(Math.random() * 20 + 10);
+        let size = Math.floor(Math.random() * 4);
+
+        this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
     }
 
     spawnMob(where:Vector3, size:number):void {
@@ -553,7 +554,7 @@ class Level extends Physijs.Scene {
                     if (mob.collides(projectile)) {
                         if (mob.level == projectile.level) {
                             collided = true;
-                            mob.damage((projectile.level + 1) * 10);
+                            mob.damage(34);
                             break;
                         }
                     }
@@ -592,12 +593,34 @@ class Level extends Physijs.Scene {
             return true;
         });
 
+        //spawn new mob?
+        if (Math.random() < 0.03) {
+            this.spawn();
+        }
+
         //physijs
         this.simulate(delta, 1);
     }
 
     timeLeft():number {
         return Level.durations[this.level] - (this.time / 1000);
+    }
+
+    dispose():void {
+        this.ground.geometry.dispose();
+
+        this.mobs.forEach((obj) => {
+            this.remove(obj);
+            obj.dispose();
+        });
+        this.projectiles.forEach((obj) => {
+            this.remove(obj);
+            obj.dispose();
+        });
+        this.polygons.forEach((obj) => {
+            this.remove(obj);
+            obj.dispose();
+        });
     }
 
     //unused
@@ -633,7 +656,7 @@ enum GameState {
 }
 
 class Game {
-    private renderer:THREE.WebGLRenderer;
+    private renderer:THREE.Renderer;
     private camera:THREE.PerspectiveCamera;
 
     private player:Player;
@@ -653,14 +676,19 @@ class Game {
 
 
     constructor() {
-        this.renderer = new THREE.WebGLRenderer({
-            antialias: true
-        });
-        this.renderer.setClearColor(0xffffff);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        if (Detector.webgl) {
+            this.renderer = new THREE.WebGLRenderer({antialias: true});
+            let rendr = <THREE.WebGLRenderer>this.renderer;
+            rendr.setClearColor(0xffffff);
+            rendr.setPixelRatio(window.devicePixelRatio);
+            rendr.setSize(window.innerWidth, window.innerHeight);
+        } else {
+            this.renderer = new THREE.CanvasRenderer();
+            let rendr = <THREE.CanvasRenderer>this.renderer;
+            rendr.setClearColor(0xffffff);
+            rendr.setPixelRatio(window.devicePixelRatio);
+            rendr.setSize(window.innerWidth, window.innerHeight);
+        }
         document.body.appendChild(this.renderer.domElement);
         window.addEventListener("resize", this.onWindowResize, false);
 
@@ -739,12 +767,12 @@ class Game {
 
         //morph!
         if (this.keyboard.down("Q")) {
-            if(this.player.minus > 0){
+            if (this.player.minus > 0) {
                 this.player.shrink();
                 this.player.minus--;
             }
         } else if (this.keyboard.down("E")) {
-            if(this.player.plus > 0){
+            if (this.player.plus > 0) {
                 this.player.grow();
                 this.player.plus--;
             }
@@ -825,16 +853,16 @@ class Game {
         this.pause();
         this.state = GameState.STOPPED;
 
-        if(this.level.level != Level.numLevels - 1){
-            if(result){
+        if (this.level.level != Level.numLevels - 1) {
+            if (result) {
                 //next level, shit!
-                this.newLevel(this.level.level+1);
+                this.level.dispose();
+                this.newLevel(this.level.level + 1);
                 this.start();
                 return;
             }
-        }else{
-            //end game
         }
+        this.level.dispose();
 
         window.removeEventListener("resize", this.onWindowResize, false);
 
@@ -846,11 +874,11 @@ class Game {
         instructions.style.fontSize = "40px";
         instructions.innerHTML = result ? "You won!" : "You lost!";
         instructions.style.display = "";
-    }
-}
 
-if (!Detector.webgl) {
-    Detector.addGetWebGLMessage();
+        if (Detector.webgl) {
+            (<WebGLRenderer>this.renderer).dispose();
+        }
+    }
 }
 
 window.onload = () => {
