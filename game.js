@@ -635,7 +635,7 @@ var Game = (function () {
     };
     Game.prototype.updateOverlay = function () {
         this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
-        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0);
+        this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0) + "s";
         this.overlay.querySelector("#level").innerHTML = "Level: " + (this.level.level + 1) + "/" + Level.numLevels;
         this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
         this.overlay.querySelector("#positive").innerHTML = "Pos polygons(E): " + this.player.plus;
