@@ -415,7 +415,7 @@ var Level = (function (_super) {
         for (var i = 0; i < 3; i++) {
             this.spawn(20, 20);
         }
-        var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
+        var groundGeometry = new THREE.BoxGeometry(1200, 1, 1200);
         this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         this.add(this.ground);
     }
