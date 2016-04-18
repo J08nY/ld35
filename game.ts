@@ -504,7 +504,7 @@ class Level extends Physijs.Scene {
             this.spawn(20, 20);
         }
 
-        let groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
+        let groundGeometry = new THREE.BoxGeometry(1200, 1, 1200);
         this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         this.add(this.ground);
     }
