@@ -376,7 +376,7 @@ class LiveMorph extends Morph {
 
 class Mob extends LiveMorph {
 
-    speeds:number[] = [25.1, 20, 19, 17];
+    speeds:number[] = [25, 23, 21, 19];
 
     static mat:Physijs.Material = Physijs.createMaterial(
         new THREE.MeshBasicMaterial({
@@ -500,7 +500,7 @@ class Level extends Physijs.Scene {
 
         this.add(player);
 
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 3; i++) {
             this.spawn(20, 20);
         }
 
@@ -509,20 +509,32 @@ class Level extends Physijs.Scene {
         this.add(this.ground);
     }
 
-    spawn(start:number, range:number) {
+    random(start?:number, range?:number):Vector3 {
         let a = Math.random() > 0.5 ? -1 : 1;
         let b = Math.random() > 0.5 ? -1 : 1;
         let x = Math.floor(Math.random() * range + start);
         let z = Math.floor(Math.random() * range + start);
-        let size = Math.floor(Math.random() * 4);
-
-        this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
+        return new Vector3(a * x, 2, b * z);
     }
 
     spawnMob(where:Vector3, size:number):void {
         let mob = new Mob(where, size);
         this.add(mob);
         this.mobs.push(mob);
+    }
+
+    spawnGroup(where:Vector3, amount:number, size:number):void {
+        for (let i = 0; i < amount; i++) {
+            this.spawnMob(where, size);
+        }
+    }
+
+    spawn(start:number, range:number, size?:number) {
+        if (!size) {
+            size = Math.floor(Math.random() * 4);
+        }
+
+        this.spawnMob(this.player.position.clone().add(this.random(start, range)), size);
     }
 
     tick(delta:number):void {
@@ -571,7 +583,7 @@ class Level extends Physijs.Scene {
         this.mobs = this.mobs.filter((mob) => {
             let alive = mob.isAlive();
             if (!alive) {
-                this.player.score+=mob.level+1;
+                this.player.score += mob.level + 1;
                 let polys = mob.die();
                 polys.forEach((poly) => {
                     this.add(poly);
@@ -597,8 +609,10 @@ class Level extends Physijs.Scene {
         });
 
         //spawn new mob?
-        if (Math.random() < 0.035) {
-            this.spawn(20, 10);
+        if (Math.random() < 0.004) {
+            let size = Math.floor(Math.random() * 4);
+            let pos = this.random(20, 10);
+            this.spawnGroup(pos, 3, size);
         }
 
         //physijs
@@ -764,7 +778,7 @@ class Game {
      */
     tick(delta:number):void {
         this.ticks++;
-        if(this.ticks % 60 == 0){
+        if (this.ticks % 60 == 0) {
             this.updateOverlay();
         }
 

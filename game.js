@@ -329,7 +329,7 @@ var Mob = (function (_super) {
     __extends(Mob, _super);
     function Mob(pos, level) {
         _super.call(this, pos, level, Mob.mat, 2);
-        this.speeds = [25.1, 20, 19, 17];
+        this.speeds = [25, 23, 21, 19];
     }
     Mob.prototype.approach = function (player) {
         var toPlayer = player.position.clone().sub(this.position).normalize();
@@ -412,25 +412,35 @@ var Level = (function (_super) {
         this.time = 0;
         this.setGravity(new THREE.Vector3(0, -40, 0));
         this.add(player);
-        for (var i = 0; i < 10; i++) {
+        for (var i = 0; i < 3; i++) {
             this.spawn(20, 20);
         }
         var groundGeometry = new THREE.BoxGeometry(1000, 1, 1000);
         this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         this.add(this.ground);
     }
-    Level.prototype.spawn = function (start, range) {
+    Level.prototype.random = function (start, range) {
         var a = Math.random() > 0.5 ? -1 : 1;
         var b = Math.random() > 0.5 ? -1 : 1;
         var x = Math.floor(Math.random() * range + start);
         var z = Math.floor(Math.random() * range + start);
-        var size = Math.floor(Math.random() * 4);
-        this.spawnMob(this.player.position.clone().add(new Vector3(a * x, 0, b * z)), size);
+        return new Vector3(a * x, 2, b * z);
     };
     Level.prototype.spawnMob = function (where, size) {
         var mob = new Mob(where, size);
         this.add(mob);
         this.mobs.push(mob);
+    };
+    Level.prototype.spawnGroup = function (where, amount, size) {
+        for (var i = 0; i < amount; i++) {
+            this.spawnMob(where, size);
+        }
+    };
+    Level.prototype.spawn = function (start, range, size) {
+        if (!size) {
+            size = Math.floor(Math.random() * 4);
+        }
+        this.spawnMob(this.player.position.clone().add(this.random(start, range)), size);
     };
     Level.prototype.tick = function (delta) {
         var _this = this;
@@ -502,8 +512,10 @@ var Level = (function (_super) {
             return true;
         });
         //spawn new mob?
-        if (Math.random() < 0.035) {
-            this.spawn(20, 10);
+        if (Math.random() < 0.004) {
+            var size = Math.floor(Math.random() * 4);
+            var pos = this.random(20, 10);
+            this.spawnGroup(pos, 3, size);
         }
         //physijs
         this.simulate(delta, 1);
