@@ -507,7 +507,7 @@ class Level extends Physijs.Scene {
         let groundGeometry = new THREE.BoxGeometry(1200, 1, 1200);
         this.ground = new Physijs.BoxMesh(groundGeometry, Level.mat, 0);
         this.add(this.ground);
-    }
+    }231
 
     random(start?:number, range?:number):Vector3 {
         let a = Math.random() > 0.5 ? -1 : 1;
