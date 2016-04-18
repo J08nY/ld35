@@ -914,6 +914,8 @@ class Game {
                 this.start();
                 return;
             }
+        } else {
+            result = true;//fix last level not winning
         }
         this.level.dispose();
 

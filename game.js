@@ -768,6 +768,9 @@ var Game = (function () {
                 return;
             }
         }
+        else {
+            result = true; //fix last level not winning
+        }
         this.level.dispose();
         window.removeEventListener("resize", this.onWindowResize, false);
         var blocker = document.getElementById("block");
