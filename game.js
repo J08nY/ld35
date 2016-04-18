@@ -514,7 +514,7 @@ var Level = (function (_super) {
         //spawn new mob?
         var amount = 0.004 * ((this.level + 1) / 2 + 0.8);
         if (this.level == Level.numLevels - 1) {
-            amount += this.time / 100000;
+            amount += (this.time / 1000) / 2000;
         }
         if (Math.random() < amount) {
             var size = Math.floor(Math.random() * 4);
@@ -566,7 +566,7 @@ var Level = (function (_super) {
                 return [new THREE.PolyhedronGeometry(verts, faces, 200)];
         }
     };
-    Level.durations = [25, 30, -1];
+    Level.durations = [25, 30, 45, Infinity];
     Level.numLevels = Level.durations.length;
     Level.mat = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xcacaca }), 1, 1);
     return Level;

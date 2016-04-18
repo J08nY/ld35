@@ -485,7 +485,7 @@ class Level extends Physijs.Scene {
     private ground:Physijs.BoxMesh;
     private time:number = 0;
 
-    static durations:number[] = [25, 30, -1];
+    static durations:number[] = [25, 30, 45, Infinity];
     static numLevels:number = Level.durations.length;
 
     static mat:Physijs.Material = Physijs.createMaterial(
@@ -611,7 +611,7 @@ class Level extends Physijs.Scene {
         //spawn new mob?
         let amount = 0.004 * ((this.level+1)/2+0.8);
         if(this.level == Level.numLevels-1){
-            amount+=this.time/100000;
+            amount+=(this.time/1000)/2000;
         }
 
         if (Math.random() < amount) {
