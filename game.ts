@@ -217,7 +217,7 @@ class Poly extends Physijs.PlaneMesh {
         1
     );
     static blue:Physijs.Material = Physijs.createMaterial(new THREE.MeshBasicMaterial({
-            color: 0x0010a0
+            color: 0x00a0b0
         }),
         1,
         1
@@ -376,11 +376,11 @@ class LiveMorph extends Morph {
 
 class Mob extends LiveMorph {
 
-    speeds:number[] = [25, 23, 21, 19];
+    speeds:number[] = [25.1, 23, 21, 19];
 
     static mat:Physijs.Material = Physijs.createMaterial(
         new THREE.MeshBasicMaterial({
-            color: 0xa01b00
+            color: 0xa01000
         }),
         .8,
         .6);
@@ -413,7 +413,7 @@ class Player extends LiveMorph {
 
     forward:Vector3 = new Vector3(0, 0, -1);
     upward:Vector3 = new Vector3(0, 1, 0);
-    camera:Vector3 = new Vector3(0, 7, 10);
+    camera:Vector3 = new Vector3(0, 6, 10);
     heading:number = 0;
     pitch:number = 0;
 
@@ -485,7 +485,7 @@ class Level extends Physijs.Scene {
     private ground:Physijs.BoxMesh;
     private time:number = 0;
 
-    static durations:number[] = [20, 30, 45, 60, -1];
+    static durations:number[] = [25, 30, -1];
     static numLevels:number = Level.durations.length;
 
     static mat:Physijs.Material = Physijs.createMaterial(
@@ -609,7 +609,12 @@ class Level extends Physijs.Scene {
         });
 
         //spawn new mob?
-        if (Math.random() < 0.004) {
+        let amount = 0.004 * ((this.level+1)/2+0.8);
+        if(this.level == Level.numLevels-1){
+            amount+=this.time/100000;
+        }
+
+        if (Math.random() < amount) {
             let size = Math.floor(Math.random() * 4);
             let pos = this.random(20, 10);
             this.spawnGroup(pos, 3, size);
@@ -700,13 +705,13 @@ class Game {
         if (Detector.webgl) {
             this.renderer = new THREE.WebGLRenderer({antialias: true});
             let rendr = <THREE.WebGLRenderer>this.renderer;
-            rendr.setClearColor(0xffffff);
+            rendr.setClearColor(0xcacaca);
             rendr.setPixelRatio(window.devicePixelRatio);
             rendr.setSize(window.innerWidth, window.innerHeight);
         } else {
             this.renderer = new THREE.CanvasRenderer();
             let rendr = <THREE.CanvasRenderer>this.renderer;
-            rendr.setClearColor(0xffffff);
+            rendr.setClearColor(0xcacaca);
             rendr.setPixelRatio(window.devicePixelRatio);
             rendr.setSize(window.innerWidth, window.innerHeight);
         }
@@ -752,10 +757,10 @@ class Game {
     updateOverlay():void {
         this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
         this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0);
-        this.overlay.querySelector("#level").innerHTML = "Level: " + this.level.level + "/" + Level.numLevels;
+        this.overlay.querySelector("#level").innerHTML = "Level: " + (this.level.level+1) + "/" + Level.numLevels;
         this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
-        this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
-        this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
+        this.overlay.querySelector("#positive").innerHTML = "Pos polygons(E): " + this.player.plus;
+        this.overlay.querySelector("#negative").innerHTML = "Neg polygons(Q): " + this.player.minus;
     }
 
     onWindowResize = () => {

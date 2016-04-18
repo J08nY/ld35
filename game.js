@@ -225,7 +225,7 @@ var Poly = (function (_super) {
         color: 0xa01000
     }), 1, 1);
     Poly.blue = Physijs.createMaterial(new THREE.MeshBasicMaterial({
-        color: 0x0010a0
+        color: 0x00a0b0
     }), 1, 1);
     return Poly;
 }(Physijs.PlaneMesh));
@@ -329,7 +329,7 @@ var Mob = (function (_super) {
     __extends(Mob, _super);
     function Mob(pos, level) {
         _super.call(this, pos, level, Mob.mat, 2);
-        this.speeds = [25, 23, 21, 19];
+        this.speeds = [25.1, 23, 21, 19];
     }
     Mob.prototype.approach = function (player) {
         var toPlayer = player.position.clone().sub(this.position).normalize();
@@ -345,7 +345,7 @@ var Mob = (function (_super) {
         return polys;
     };
     Mob.mat = Physijs.createMaterial(new THREE.MeshBasicMaterial({
-        color: 0xa01b00
+        color: 0xa01000
     }), .8, .6);
     return Mob;
 }(LiveMorph));
@@ -359,7 +359,7 @@ var Player = (function (_super) {
         this.plus = 5;
         this.forward = new Vector3(0, 0, -1);
         this.upward = new Vector3(0, 1, 0);
-        this.camera = new Vector3(0, 7, 10);
+        this.camera = new Vector3(0, 6, 10);
         this.heading = 0;
         this.pitch = 0;
         this.score = 0;
@@ -512,7 +512,11 @@ var Level = (function (_super) {
             return true;
         });
         //spawn new mob?
-        if (Math.random() < 0.004) {
+        var amount = 0.004 * ((this.level + 1) / 2 + 0.8);
+        if (this.level == Level.numLevels - 1) {
+            amount += this.time / 100000;
+        }
+        if (Math.random() < amount) {
             var size = Math.floor(Math.random() * 4);
             var pos = this.random(20, 10);
             this.spawnGroup(pos, 3, size);
@@ -562,7 +566,7 @@ var Level = (function (_super) {
                 return [new THREE.PolyhedronGeometry(verts, faces, 200)];
         }
     };
-    Level.durations = [20, 30, 45, 60, -1];
+    Level.durations = [25, 30, -1];
     Level.numLevels = Level.durations.length;
     Level.mat = Physijs.createMaterial(new THREE.MeshBasicMaterial({ color: 0xcacaca }), 1, 1);
     return Level;
@@ -590,14 +594,14 @@ var Game = (function () {
         if (Detector.webgl) {
             this.renderer = new THREE.WebGLRenderer({ antialias: true });
             var rendr = this.renderer;
-            rendr.setClearColor(0xffffff);
+            rendr.setClearColor(0xcacaca);
             rendr.setPixelRatio(window.devicePixelRatio);
             rendr.setSize(window.innerWidth, window.innerHeight);
         }
         else {
             this.renderer = new THREE.CanvasRenderer();
             var rendr = this.renderer;
-            rendr.setClearColor(0xffffff);
+            rendr.setClearColor(0xcacaca);
             rendr.setPixelRatio(window.devicePixelRatio);
             rendr.setSize(window.innerWidth, window.innerHeight);
         }
@@ -632,10 +636,10 @@ var Game = (function () {
     Game.prototype.updateOverlay = function () {
         this.overlay.querySelector("#score").innerHTML = "Score: " + this.player.score;
         this.overlay.querySelector("#time").innerHTML = "Time left: " + this.level.timeLeft().toFixed(0);
-        this.overlay.querySelector("#level").innerHTML = "Level: " + this.level.level + "/" + Level.numLevels;
+        this.overlay.querySelector("#level").innerHTML = "Level: " + (this.level.level + 1) + "/" + Level.numLevels;
         this.overlay.querySelector("#life").innerHTML = "Life: " + this.player.life + "%";
-        this.overlay.querySelector("#positive").innerHTML = "Pos polygons: " + this.player.plus;
-        this.overlay.querySelector("#negative").innerHTML = "Neg polygons: " + this.player.minus;
+        this.overlay.querySelector("#positive").innerHTML = "Pos polygons(E): " + this.player.plus;
+        this.overlay.querySelector("#negative").innerHTML = "Neg polygons(Q): " + this.player.minus;
     };
     /**
      * Just render the scene.
